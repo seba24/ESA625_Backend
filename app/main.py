@@ -4,12 +4,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import logging
+
 from app.core.config import settings
-from app.core.database import engine, Base
 from app.api.routes import auth, credits, reports
 
-# Crear tablas (en producción usar Alembic migrations)
-Base.metadata.create_all(bind=engine)
+log = logging.getLogger(__name__)
 
 app = FastAPI(
     title="ESA625 Backend",
@@ -33,6 +33,17 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(credits.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+
+
+@app.on_event("startup")
+def on_startup():
+    """Crear tablas al arrancar (si hay DB disponible)."""
+    try:
+        from app.core.database import engine, Base
+        Base.metadata.create_all(bind=engine)
+        log.info("Base de datos inicializada")
+    except Exception as e:
+        log.warning(f"No se pudo conectar a la DB: {e} — arrancando sin DB")
 
 
 @app.get("/api/health")

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
 
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/esa625_db"
+    database_url: str = "sqlite:///./esa625.db"
 
     # JWT
     jwt_secret_key: str = "change-this-to-a-random-secret-key"

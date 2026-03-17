@@ -1,0 +1,34 @@
+name: esa625-backend
+region: nyc
+services:
+  - name: api
+    github:
+      repo: slorandi/ESA625_Backend
+      branch: main
+      deploy_on_push: true
+    build_command: pip install -r requirements.txt
+    run_command: uvicorn app.main:app --host 0.0.0.0 --port 8080
+    environment_slug: python
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-512mb-10gb
+    http_port: 8080
+    routes:
+      - path: /
+    health_check:
+      http_path: /api/health
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: JWT_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: APP_ENV
+        scope: RUN_TIME
+        value: production
+
+databases:
+  - name: esa625-db
+    engine: PG
+    production: false
+    version: "16"

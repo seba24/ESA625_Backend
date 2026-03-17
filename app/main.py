@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """ESA625 Backend — FastAPI application."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import logging
+import traceback
 
 from app.core.config import settings
 from app.api.routes import auth, credits, reports
@@ -44,6 +46,16 @@ def on_startup():
         log.info("Base de datos inicializada")
     except Exception as e:
         log.warning(f"No se pudo conectar a la DB: {e} — arrancando sin DB")
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Capturar errores no manejados y devolver detalle."""
+    log.error(f"Error no manejado: {exc}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__},
+    )
 
 
 @app.get("/api/health")

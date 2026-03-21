@@ -221,6 +221,11 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
         log.info(f"Reporte PDF seguridad eléctrica generado: {output_path}")
         return output_path
 
+    def _add_results_section(self, results: Dict[str, Any]):
+        """Implementación requerida por ABC. Delegamos a _add_safety_results."""
+        measurements = results.get('measurements', [])
+        self._add_safety_results(measurements)
+
     def _add_safety_results(self, measurements: List[Dict[str, Any]]):
         """
         Agregar tabla de resultados de seguridad eléctrica.

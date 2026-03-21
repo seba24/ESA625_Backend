@@ -1,17 +1,28 @@
 # -*- coding: utf-8 -*-
 """Endpoints de reportes."""
 
+import io
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.models.report import Report
+from app.models.report import Report, CreditTransaction
 from app.schemas.reports import ReportUploadResponse, ReportListResponse
 from app.services.report_service import save_report_pdf, get_report_filepath
+
+log = logging.getLogger(__name__)
+
+# Mapeo módulo → generador
+REPORT_GENERATORS = {
+    "ventilator": "app.services.reports.ventilator_report.VentilatorReportGenerator",
+}
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -128,4 +139,122 @@ def download_report(
         filepath,
         media_type="application/pdf",
         filename=filename,
+    )
+
+
+class GenerateReportRequest(BaseModel):
+    module: str
+    results: Dict[str, Any]
+    client: Dict[str, Any] = {}
+    equipment: Dict[str, Any] = {}
+    protocol: Dict[str, Any] = {}
+    analyzer: Dict[str, Any] = {}
+    company: Dict[str, Any] = {}
+
+
+@router.post("/generate")
+def generate_report(
+    req: GenerateReportRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generar PDF en el servidor a partir de datos JSON.
+    Descuenta 1 crédito. Devuelve el PDF como descarga.
+    """
+    # Verificar créditos
+    if user.credits < 1:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Sin créditos disponibles",
+        )
+
+    # Verificar módulo soportado
+    generator_path = REPORT_GENERATORS.get(req.module)
+    if not generator_path:
+        supported = list(REPORT_GENERATORS.keys())
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Módulo no soportado. Disponibles: {supported}",
+        )
+
+    # Importar generador dinámicamente
+    try:
+        module_path, class_name = generator_path.rsplit(".", 1)
+        import importlib
+        mod = importlib.import_module(module_path)
+        GeneratorClass = getattr(mod, class_name)
+    except Exception as e:
+        log.error(f"Error importando generador {generator_path}: {e}")
+        raise HTTPException(500, f"Error cargando generador: {e}")
+
+    # Preparar datos
+    results_data = {
+        "results": req.results,
+        "client": req.client,
+        "equipment": req.equipment,
+        "protocol": req.protocol,
+        "analyzer": req.analyzer,
+    }
+
+    # Setear datos de empresa si vienen
+    generator = GeneratorClass()
+    if req.company:
+        generator.company_name = req.company.get("name", "")
+        generator.company_address = req.company.get("address", "")
+        generator.company_phone = req.company.get("phone", "")
+        generator.company_email = req.company.get("email", "")
+        generator.company_website = req.company.get("website", "")
+        generator.technician_name = req.company.get("technician", "")
+
+    # Generar PDF en memoria
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        result_path = generator.generate_report(results_data, output_path=tmp_path)
+        if not result_path or not os.path.exists(result_path):
+            raise HTTPException(500, "Error generando PDF")
+
+        with open(result_path, "rb") as f:
+            pdf_bytes = f.read()
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+    # Descontar crédito
+    user.credits -= 1
+    txn = CreditTransaction(
+        user_id=user.id,
+        amount=-1,
+        balance_after=user.credits,
+        description=f"Reporte {req.module} generado en servidor",
+    )
+    db.add(txn)
+
+    # Guardar registro
+    report = Report(
+        user_id=user.id,
+        module=req.module,
+        protocol_name=req.protocol.get("name", ""),
+        client_name=req.client.get("institucion", req.client.get("name", "")),
+        equipment_info=str(req.equipment),
+        pdf_size=len(pdf_bytes),
+        credits_charged=1,
+    )
+    db.add(report)
+    db.commit()
+
+    log.info(f"PDF generado para user {user.id}, módulo {req.module}, "
+             f"créditos restantes: {user.credits}")
+
+    # Devolver PDF como descarga
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="reporte_{req.module}.pdf"',
+            "X-Credits-Remaining": str(user.credits),
+        },
     )

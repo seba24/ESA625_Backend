@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 1440  # 24 horas
 
+    # MercadoPago
+    mercadopago_access_token: str = ""
+    backend_url: str = "https://lionfish-app-58cxz.ondigitalocean.app"
+
     # CORS
     cors_origins: str = "http://localhost:8625,http://127.0.0.1:8625"
 

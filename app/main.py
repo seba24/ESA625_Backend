@@ -62,8 +62,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/api/health")
 def health_check():
     """Health check para DigitalOcean."""
+    db_type = "postgresql" if settings.database_url.startswith("postgresql") else "sqlite"
     return {
         "status": "ok",
         "version": settings.app_version,
         "env": settings.app_env,
+        "db": db_type,
     }

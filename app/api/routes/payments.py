@@ -22,9 +22,9 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 # Paquetes de créditos disponibles
 CREDIT_PACKAGES = {
     1: {"price": 10000, "description": "1 crédito"},
-    5: {"price": 40000, "description": "5 créditos"},
-    10: {"price": 70000, "description": "10 créditos"},
-    25: {"price": 150000, "description": "25 créditos"},
+    5: {"price": 45000, "description": "5 créditos"},
+    10: {"price": 80000, "description": "10 créditos"},
+    25: {"price": 175000, "description": "25 créditos"},
 }
 
 

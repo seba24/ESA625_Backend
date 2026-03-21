@@ -27,6 +27,10 @@ class InfusionPumpReportGenerator(BaseReportGenerator):
     def __init__(self):
         super().__init__()
 
+    def _add_results_section(self, results: Dict[str, Any]):
+        """Implementación requerida por ABC."""
+        pass
+
     def generate_report(self, results_data: Dict[str, Any],
                         output_path: Optional[str] = None) -> Optional[str]:
         try:

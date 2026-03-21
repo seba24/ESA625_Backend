@@ -645,7 +645,7 @@ class BaseReportGenerator(ABC):
             ("Tipo de Equipo:", ['tipo_equipo', 'type', 'equipment_type']),
             ("Fabricante/Marca:", ['marca', 'manufacturer', 'brand']),
             ("Modelo:", ['modelo', 'model']),
-            ("Número de Serie:", ['serie_equipo', 'serial', 'serial_number']),
+            ("Número de Serie:", ['serie_equipo', 'serie', 'serial', 'serial_number']),
             ("Inventario:", ['inventario', 'inventory', 'asset_number']),
             ("Clase:", ['clase_equipo', 'class', 'equipment_class']),
             ("Tipo Partes Aplicadas:", ['tipo_partes_aplicadas', 'applied_parts_type']),

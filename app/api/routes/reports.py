@@ -22,6 +22,13 @@ log = logging.getLogger(__name__)
 # Mapeo módulo → generador
 REPORT_GENERATORS = {
     "ventilator": "app.services.reports.ventilator_report.VentilatorReportGenerator",
+    "defibrillator": "app.services.reports.defibrillator_report.DefibrillatorReportGenerator",
+    "electrosurgery": "app.services.reports.electrosurgery_report.ESUReportGenerator",
+    "ecg_performance": "app.services.reports.ecg_performance_report.ECGPerformanceReportGenerator",
+    "pacemaker": "app.services.reports.pacemaker_report.PacemakerReportGenerator",
+    "multiparameter_monitor": "app.services.reports.multiparameter_report.MPReportGenerator",
+    "infusion_pump": "app.services.reports.infusion_pump_report.InfusionPumpReportGenerator",
+    "patient_simulation": "app.services.reports.patient_simulation_report.PatientSimulationReportGenerator",
 }
 
 router = APIRouter(prefix="/reports", tags=["reports"])

@@ -29,6 +29,7 @@ REPORT_GENERATORS = {
     "multiparameter_monitor": "app.services.reports.multiparameter_report.MPReportGenerator",
     "infusion_pump": "app.services.reports.infusion_pump_report.InfusionPumpReportGenerator",
     "patient_simulation": "app.services.reports.patient_simulation_report.PatientSimulationReportGenerator",
+    "electrical_safety": "app.services.reports.electrical_safety_report.ElectricalSafetyReportGenerator",
 }
 
 router = APIRouter(prefix="/reports", tags=["reports"])

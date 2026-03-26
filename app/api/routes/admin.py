@@ -3,7 +3,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.deps import get_admin_user
 from app.models.user import User
 from app.models.report import CreditTransaction
+from app.models.login_attempt import LoginAttempt
 
 log = logging.getLogger(__name__)
 
@@ -151,3 +152,46 @@ def make_admin(
     user.is_admin = True
     db.commit()
     return {"message": f"{email} ahora es admin", "user_id": user.id}
+
+
+class LoginAttemptResponse(BaseModel):
+    id: int
+    email: str
+    ip_address: str
+    user_agent: str
+    success: bool
+    failure_reason: str
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/login-attempts", response_model=List[LoginAttemptResponse])
+def get_login_attempts(
+    email: Optional[str] = Query(None, description="Filtrar por email"),
+    failed_only: bool = Query(False, description="Solo intentos fallidos"),
+    limit: int = Query(100, ge=1, le=1000),
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Ver intentos de login (solo admin)."""
+    query = db.query(LoginAttempt).order_by(LoginAttempt.created_at.desc())
+
+    if email:
+        query = query.filter(LoginAttempt.email == email)
+    if failed_only:
+        query = query.filter(LoginAttempt.success == False)
+
+    attempts = query.limit(limit).all()
+    return [
+        LoginAttemptResponse(
+            id=a.id,
+            email=a.email,
+            ip_address=a.ip_address,
+            user_agent=a.user_agent,
+            success=a.success,
+            failure_reason=a.failure_reason,
+            created_at=a.created_at.isoformat(),
+        )
+        for a in attempts
+    ]

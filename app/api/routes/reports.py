@@ -2,9 +2,13 @@
 """Endpoints de reportes."""
 
 import io
+import json
 import logging
+import base64
+import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from cryptography.fernet import Fernet, InvalidToken
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -152,22 +156,39 @@ def download_report(
 
 class GenerateReportRequest(BaseModel):
     module: str
-    results: Dict[str, Any]
+    results: Dict[str, Any] = {}
     client: Dict[str, Any] = {}
     equipment: Dict[str, Any] = {}
     protocol: Dict[str, Any] = {}
     analyzer: Dict[str, Any] = {}
     company: Dict[str, Any] = {}
+    encrypted: Optional[str] = None
+
+
+def _derive_fernet_key(token: str) -> bytes:
+    """Derivar clave Fernet del JWT token + salt (misma lógica que desktop)."""
+    material = token + 'ESA625-CLOUD-2026'
+    key_bytes = hashlib.sha256(material.encode()).digest()
+    return base64.urlsafe_b64encode(key_bytes)
+
+
+def _decrypt_payload(encrypted_str: str, token: str) -> dict:
+    """Descifrar payload Fernet."""
+    key = _derive_fernet_key(token)
+    f = Fernet(key)
+    plaintext = f.decrypt(encrypted_str.encode('ascii'))
+    return json.loads(plaintext)
 
 
 @router.post("/generate")
 def generate_report(
     req: GenerateReportRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Generar PDF en el servidor a partir de datos JSON.
+    Generar PDF en el servidor a partir de datos JSON cifrados con Fernet.
     Descuenta 1 crédito. Devuelve el PDF como descarga.
     """
     # Verificar créditos
@@ -176,6 +197,33 @@ def generate_report(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Sin créditos disponibles",
         )
+
+    # Descifrar payload si viene cifrado
+    if req.encrypted:
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header else ''
+        try:
+            decrypted = _decrypt_payload(req.encrypted, token)
+            req = GenerateReportRequest(
+                module=decrypted.get('module', req.module),
+                results=decrypted.get('results', {}),
+                client=decrypted.get('client', {}),
+                equipment=decrypted.get('equipment', {}),
+                protocol=decrypted.get('protocol', {}),
+                analyzer=decrypted.get('analyzer', {}),
+                company=decrypted.get('company', {}),
+            )
+        except InvalidToken:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Error descifrando datos: clave inválida",
+            )
+        except Exception as e:
+            log.error(f"Error descifrando payload: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error descifrando datos: {e}",
+            )
 
     # Verificar módulo soportado
     generator_path = REPORT_GENERATORS.get(req.module)

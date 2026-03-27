@@ -162,6 +162,7 @@ class GenerateReportRequest(BaseModel):
     protocol: Dict[str, Any] = {}
     analyzer: Dict[str, Any] = {}
     company: Dict[str, Any] = {}
+    company_id: Optional[int] = None
     encrypted: Optional[str] = None
 
 
@@ -253,15 +254,47 @@ def generate_report(
         "analyzer": req.analyzer,
     }
 
-    # Setear datos de empresa si vienen
+    # Setear datos de empresa: por company_id (servidor) o por datos inline
     generator = GeneratorClass()
-    if req.company:
-        generator.company_name = req.company.get("name", "")
-        generator.company_address = req.company.get("address", "")
-        generator.company_phone = req.company.get("phone", "")
-        generator.company_email = req.company.get("email", "")
-        generator.company_website = req.company.get("website", "")
-        generator.technician_name = req.company.get("technician", "")
+    company_data = req.company or {}
+
+    if req.company_id:
+        from app.models.company import Company
+        comp = db.query(Company).filter(
+            Company.id == req.company_id, Company.user_id == user.id
+        ).first()
+        if comp:
+            company_data = {
+                "name": comp.name,
+                "address": comp.address,
+                "phone": comp.phone,
+                "email": comp.email,
+                "website": comp.website,
+                "technician": comp.technician,
+            }
+            # Logo y firma como archivos temporales para el generador
+            if comp.logo:
+                import tempfile as _tf
+                logo_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
+                logo_tmp.write(comp.logo)
+                logo_tmp.close()
+                generator.set_logo(logo_tmp.name) if hasattr(generator, 'set_logo') else None
+                generator._company_logo_tmp = logo_tmp.name
+            if comp.signature:
+                sig_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
+                sig_tmp.write(comp.signature)
+                sig_tmp.close()
+                if hasattr(generator, 'signature_path'):
+                    generator.signature_path = sig_tmp.name
+                generator._company_sig_tmp = sig_tmp.name
+
+    if company_data:
+        generator.company_name = company_data.get("name", "")
+        generator.company_address = company_data.get("address", "")
+        generator.company_phone = company_data.get("phone", "")
+        generator.company_email = company_data.get("email", "")
+        generator.company_website = company_data.get("website", "")
+        generator.technician_name = company_data.get("technician", "")
 
     # Generar PDF en memoria
     import tempfile, os
@@ -278,6 +311,11 @@ def generate_report(
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+        # Limpiar temporales de logo/firma
+        for attr in ('_company_logo_tmp', '_company_sig_tmp'):
+            tmp_file = getattr(generator, attr, None)
+            if tmp_file and os.path.exists(tmp_file):
+                os.unlink(tmp_file)
 
     # Descontar crédito
     user.credits -= 1

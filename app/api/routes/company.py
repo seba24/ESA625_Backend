@@ -217,3 +217,19 @@ def get_signature(
         raise HTTPException(404, "Firma no encontrada")
 
     return {"signature_base64": base64.b64encode(company.signature).decode('ascii')}
+
+
+@router.get("/{company_id}/protocol-key")
+def get_protocol_key(
+    company_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Obtener clave de cifrado de protocolos de la empresa."""
+    company = db.query(Company).filter(
+        Company.id == company_id, Company.user_id == user.id
+    ).first()
+    if not company:
+        raise HTTPException(404, "Empresa no encontrada")
+
+    return {"protocol_key": company.protocol_key, "company_id": company.id, "company_name": company.name}

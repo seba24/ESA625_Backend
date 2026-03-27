@@ -4,7 +4,7 @@
 from datetime import datetime, timezone
 
 from cryptography.fernet import Fernet
-from sqlalchemy import String, Integer, DateTime, Text, LargeBinary, ForeignKey
+from sqlalchemy import String, Integer, Float, DateTime, Text, LargeBinary, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -27,7 +27,15 @@ class Company(Base):
     website: Mapped[str] = mapped_column(String(255), default="")
     technician: Mapped[str] = mapped_column(String(255), default="")
     logo: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
+    logo_x: Mapped[float] = mapped_column(Float, default=0.0)
+    logo_y: Mapped[float] = mapped_column(Float, default=0.0)
+    logo_width: Mapped[float] = mapped_column(Float, default=0.0)
+    logo_height: Mapped[float] = mapped_column(Float, default=0.0)
     signature: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
+    signature_x: Mapped[float] = mapped_column(Float, default=0.0)
+    signature_y: Mapped[float] = mapped_column(Float, default=0.0)
+    signature_width: Mapped[float] = mapped_column(Float, default=0.0)
+    signature_height: Mapped[float] = mapped_column(Float, default=0.0)
     protocol_key: Mapped[str] = mapped_column(String(255), default=_generate_fernet_key)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

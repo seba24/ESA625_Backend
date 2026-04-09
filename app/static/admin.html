@@ -5,81 +5,227 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ESA625 Cloud - Panel Admin</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:20px}.container{max-width:900px;margin:0 auto}h1{color:#60a5fa;margin-bottom:8px;font-size:1.5em}h2{color:#94a3b8;margin:20px 0 10px;font-size:1.1em;border-bottom:1px solid #334155;padding-bottom:6px}.subtitle{color:#64748b;font-size:.85em;margin-bottom:20px}#login-section{background:#1e293b;padding:20px;border-radius:8px;margin-bottom:20px}#admin-section{display:none}.form-row{display:flex;gap:10px;margin-bottom:10px;align-items:center;flex-wrap:wrap}.form-row label{min-width:120px;color:#94a3b8;font-size:.9em}input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em}input:focus{border-color:#3b82f6;outline:none}input[type=number]{width:80px}input[type=email],input[type=text],input[type=password]{min-width:250px}button{background:#1e3a8a;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:.9em;font-weight:600}button:hover{background:#2563eb}button.secondary{background:#334155}button.secondary:hover{background:#475569}button.danger{background:#991b1b}button.danger:hover{background:#dc2626}table{width:100%;border-collapse:collapse;margin:10px 0}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-size:.8em;text-transform:uppercase}td{padding:8px 12px;border-bottom:1px solid #1e293b;font-size:.9em}tr:hover{background:#1e293b}.badge-admin{background:#166534;color:#4ade80;padding:2px 8px;border-radius:10px;font-size:.8em}.badge-user{background:#1e293b;color:#64748b;padding:2px 8px;border-radius:10px;font-size:.8em}.msg{padding:10px;border-radius:4px;margin:10px 0;font-size:.9em}.msg-ok{background:#14532d;color:#4ade80;border:1px solid #166534}.msg-err{background:#450a0a;color:#fca5a5;border:1px solid #991b1b}.card{background:#1e293b;padding:16px;border-radius:8px;margin-bottom:16px}.status-bar{display:flex;gap:20px;background:#1e293b;padding:10px 16px;border-radius:8px;margin-bottom:20px;font-size:.85em;flex-wrap:wrap}.status-bar .item{display:flex;align-items:center;gap:6px}.dot{width:8px;height:8px;border-radius:50%}.dot-green{background:#4ade80}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e2e8f0;padding:20px}
+.container{max-width:900px;margin:0 auto}
+h1{color:#60a5fa;margin-bottom:8px;font-size:1.5em}
+h2{color:#94a3b8;margin:20px 0 10px;font-size:1.1em;border-bottom:1px solid #334155;padding-bottom:6px}
+.subtitle{color:#64748b;font-size:.85em;margin-bottom:20px}
+#login-section{background:#1e293b;padding:20px;border-radius:8px;margin-bottom:20px}
+#admin-section{display:none}
+.form-row{display:flex;gap:10px;margin-bottom:10px;align-items:center;flex-wrap:wrap}
+.form-row label{min-width:120px;color:#94a3b8;font-size:.9em}
+input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em}
+input:focus{border-color:#3b82f6;outline:none}
+input[type=number]{width:80px}
+input[type=email],input[type=text],input[type=password]{min-width:250px}
+button{background:#1e3a8a;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:.9em;font-weight:600}
+button:hover{background:#2563eb}
+.secondary{background:#334155}.secondary:hover{background:#475569}
+.danger{background:#991b1b}.danger:hover{background:#dc2626}
+table{width:100%;border-collapse:collapse;margin:10px 0}
+th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-size:.8em;text-transform:uppercase}
+td{padding:8px 12px;border-bottom:1px solid #1e293b;font-size:.9em}
+tr:hover td{background:#162032}
+.badge-admin{background:#166534;color:#4ade80;padding:2px 8px;border-radius:10px;font-size:.8em}
+.badge-user{background:#1e293b;color:#64748b;padding:2px 8px;border-radius:10px;font-size:.8em}
+.msg{padding:10px;border-radius:4px;margin:10px 0;font-size:.9em;min-height:1em}
+.msg-ok{background:#14532d;color:#4ade80;border:1px solid #166534}
+.msg-err{background:#450a0a;color:#fca5a5;border:1px solid #991b1b}
+.card{background:#1e293b;padding:16px;border-radius:8px;margin-bottom:16px}
+.status-bar{display:flex;gap:20px;background:#1e293b;padding:10px 16px;border-radius:8px;margin-bottom:20px;font-size:.85em;flex-wrap:wrap}
+.status-bar .item{display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block}
 </style>
 </head>
 <body>
 <div class="container">
 <h1>ESA625 Cloud Admin</h1>
 <p class="subtitle">SR Certificaciones SRL - Panel de administracion</p>
+
 <div id="login-section" class="card">
 <h2>Iniciar sesion admin</h2>
 <div class="form-row"><label>Email:</label><input type="email" id="login-email" value="admin@srcertificaciones.com"></div>
 <div class="form-row"><label>Password:</label><input type="password" id="login-password" placeholder="Password admin"></div>
-<div class="form-row"><button onclick="doLogin()">Iniciar Sesion</button></div>
+<div class="form-row"><button id="btn-login">Iniciar Sesion</button></div>
 <div id="login-msg"></div>
 </div>
+
 <div id="admin-section">
 <div class="status-bar">
-<div class="item"><div class="dot dot-green"></div> Conectado como admin</div>
+<div class="item"><span class="dot"></span> Conectado como admin</div>
 <div class="item">Email: <strong id="admin-email"></strong></div>
 <div class="item">Creditos: <strong id="admin-credits"></strong></div>
-<div class="item"><button class="secondary" onclick="doLogout()">Cerrar Sesion</button></div>
+<div class="item"><button class="secondary" id="btn-logout">Cerrar Sesion</button></div>
 </div>
+
 <div class="card">
 <h2>Usuarios registrados</h2>
-<button class="secondary" onclick="loadUsers()" style="margin-bottom:10px">Actualizar</button>
+<button class="secondary" id="btn-refresh-users" style="margin-bottom:10px">Actualizar</button>
 <table><thead><tr><th>ID</th><th>Email</th><th>Nombre</th><th>Empresa</th><th>Creditos</th><th>Rol</th></tr></thead><tbody id="users-table"></tbody></table>
 </div>
+
 <div class="card">
 <h2>Agregar creditos</h2>
 <div class="form-row"><label>Email:</label><input type="email" id="credit-email" placeholder="usuario@email.com"></div>
 <div class="form-row"><label>Cantidad:</label><input type="number" id="credit-amount" value="10" min="1" max="1000"></div>
 <div class="form-row"><label>Motivo:</label><input type="text" id="credit-reason" placeholder="Motivo (opcional)"></div>
-<div class="form-row"><button onclick="doAddCredits()">Agregar Creditos</button></div>
+<div class="form-row"><button id="btn-add-credits">Agregar Creditos</button></div>
 <div id="credit-msg"></div>
 </div>
+
 <div class="card">
 <h2>Quitar creditos</h2>
 <div class="form-row"><label>Email:</label><input type="email" id="rmcredit-email" placeholder="usuario@email.com"></div>
 <div class="form-row"><label>Cantidad:</label><input type="number" id="rmcredit-amount" value="10" min="1" max="1000"></div>
 <div class="form-row"><label>Motivo:</label><input type="text" id="rmcredit-reason" placeholder="Motivo"></div>
-<div class="form-row"><button class="danger" onclick="doRemoveCredits()">Quitar Creditos</button></div>
+<div class="form-row"><button class="danger" id="btn-rm-credits">Quitar Creditos</button></div>
 <div id="rmcredit-msg"></div>
 </div>
+
 <div class="card">
 <h2>Resetear contrasena</h2>
 <div class="form-row"><label>Email:</label><input type="email" id="pw-email" placeholder="usuario@email.com"></div>
 <div class="form-row"><label>Nueva pass:</label><input type="password" id="pw-new" placeholder="minimo 4 caracteres"></div>
-<div class="form-row"><button class="danger" onclick="doResetPassword()">Resetear Contrasena</button></div>
+<div class="form-row"><button class="danger" id="btn-reset-pw">Resetear Contrasena</button></div>
 <div id="pw-msg"></div>
 </div>
+
 <div class="card">
 <h2>Hacer admin</h2>
 <div class="form-row"><label>Email:</label><input type="email" id="makeadmin-email" placeholder="usuario@email.com"></div>
-<div class="form-row"><button onclick="doMakeAdmin()">Hacer Admin</button></div>
+<div class="form-row"><button id="btn-make-admin">Hacer Admin</button></div>
 <div id="makeadmin-msg"></div>
 </div>
 </div>
 </div>
-<script>
-var API=window.location.origin+"/api",TOKEN="";
-function showMsg(id,ok,t){var e=document.getElementById(id);e.className=ok?"msg msg-ok":"msg msg-err";e.textContent=String(t);setTimeout(function(){e.textContent=""},8000)}
-function errMsg(d){if(!d)return"Error desconocido";if(typeof d==="string")return d;if(d.detail)return typeof d.detail==="string"?d.detail:JSON.stringify(d.detail);return JSON.stringify(d)}
-function api(m,p,b){var o={method:m,headers:{"Content-Type":"application/json"}};if(TOKEN)o.headers["Authorization"]="Bearer "+TOKEN;if(b)o.body=JSON.stringify(b);return fetch(API+p,o).then(function(r){return r.json().then(function(d){return{status:r.status,data:d}}).catch(function(){return{status:r.status,data:{}}})})}
-function doLogin(){var e=document.getElementById("login-email").value.trim(),p=
-function doRemoveCredits(){var e=document.getElementById("rmcredit-email").value.trim(),c=parseInt(document.getElementById("rmcredit-amount").value)||0,r=document.getElementById("rmcredit-reason").value.trim();if(!e||c<1){showMsg("rmcredit-msg",false,"Email y cantidad requeridos");return}if(!confirm("Quitar "+c+" creditos a "+e+"?"))return;api("POST","/admin/remove-credits",{email:e,credits:c,reason:r||"Ajuste admin"}).then(function(r){if(r.status===200){showMsg("rmcredit-msg",true,"Quitados "+Math.abs(r.data.credits_added)+" creditos. Balance: "+r.data.balance);loadUsers()}else{showMsg("rmcredit-msg",false,errMsg(r.data))}})}
-document.getElementById("login-password").value;if(!e||!p){showMsg("login-msg",false,"Ingrese email y password");return}api("POST","/auth/login",{email:e,password:p}).then(function(r){if(r.status===200){TOKEN=r.data.access_token;document.getElementById("admin-email").textContent=e;document.getElementById("admin-credits").textContent=r.data.credits;document.getElementById("login-section").style.display="none";document.getElementById("admin-section").style.display="block";loadUsers()}else{showMsg("login-msg",false,errMsg(r.data))}})}
-function doLogout(){TOKEN="";document.getElementById("login-section").style.display="block";document.getElementById("admin-section").style.display="none";
-function doRemoveCredits(){var e=document.getElementById("rmcredit-email").value.trim(),c=parseInt(document.getElementById("rmcredit-amount").value)||0,r=document.getElementById("rmcredit-reason").value.trim();if(!e||c<1){showMsg("rmcredit-msg",false,"Email y cantidad requeridos");return}if(!confirm("Quitar "+c+" creditos a "+e+"?"))return;api("POST","/admin/remove-credits",{email:e,credits:c,reason:r||"Ajuste admin"}).then(function(r){if(r.status===200){showMsg("rmcredit-msg",true,"Quitados "+Math.abs(r.data.credits_added)+" creditos. Balance: "+r.data.balance);loadUsers()}else{showMsg("rmcredit-msg",false,errMsg(r.data))}})}
-document.getElementById("login-password").value=""}
-function loadUsers(){api("GET","/admin/users").then(function(r){var tb=document.getElementById("users-table");tb.innerHTML="";if(r.status===200&&Array.isArray(r.data)){r.data.forEach(function(u){var role=u.is_admin?"<span class=badge-admin>Admin</span>":"<span class=badge-user>Usuario</span>";tb.innerHTML+="<tr><td>"+u.id+"</td><td>"+u.email+"</td><td>"+(u.full_name||"")+"</td><td>"+(u.company||"")+"</td><td><strong>"+u.credits+"</strong></td><td>"+role+"</td></tr>"})}else{tb.innerHTML="<tr><td colspan=6>Error</td></tr>"}})}
-function doAddCredits(){var e=document.getElementById("credit-email").value.trim(),c=parseInt(document.getElementById("credit-amount").value)||0,r=document.getElementById("credit-reason").value.trim();if(!e||c<1){showMsg("credit-msg",false,"Email y cantidad requeridos");return}api("POST","/admin/add-credits",{email:e,credits:c,reason:r||"Panel admin"}).then(function(r){if(r.status===200){showMsg("credit-msg",true,r.data.credits_added+" creditos a "+r.data.email+". Balance: "+r.data.balance);loadUsers()}else{showMsg("credit-msg",false,errMsg(r.data))}})}
-function doResetPassword(){var e=document.getElementById("pw-email").value.trim(),p=document.getElementById("pw-new").value;if(!e||!p){showMsg("pw-msg",false,"Email y password requeridos");return}if(p.length<4){showMsg("pw-msg",false,"Minimo 4 caracteres");return}if(!confirm("Resetear password de "+e+"?"))return;api("POST","/admin/reset-password",{email:e,new_password:p}).then(function(r){if(r.status===200){showMsg("pw-msg",true,r.data.message||"OK")}else{showMsg("pw-msg",false,errMsg(r.data))}})}
-function doMakeAdmin(){var e=document.getElementById("makeadmin-email").value.trim();if(!e){showMsg("makeadmin-msg",false,"Email requerido");return}if(!confirm("Hacer admin a "+e+"?"))return;api("POST","/admin/make-admin?email="+encodeURIComponent(e)).then(function(r){if(r.status===200){showMsg("makeadmin-msg",true,r.data.message||"OK");loadUsers()}else{showMsg("makeadmin-msg",false,errMsg(r.data))}})}
 
-function doRemoveCredits(){var e=document.getElementById("rmcredit-email").value.trim(),c=parseInt(document.getElementById("rmcredit-amount").value)||0,r=document.getElementById("rmcredit-reason").value.trim();if(!e||c<1){showMsg("rmcredit-msg",false,"Email y cantidad requeridos");return}if(!confirm("Quitar "+c+" creditos a "+e+"?"))return;api("POST","/admin/remove-credits",{email:e,credits:c,reason:r||"Ajuste admin"}).then(function(r){if(r.status===200){showMsg("rmcredit-msg",true,"Quitados "+Math.abs(r.data.credits_added)+" creditos. Balance: "+r.data.balance);loadUsers()}else{showMsg("rmcredit-msg",false,errMsg(r.data))}})}
-document.getElementById("login-password").addEventListener("keydown",function(e){if(e.key==="Enter")doLogin()});
+<script>
+(function(){
+  var API = window.location.origin + "/api";
+  var TOKEN = "";
+
+  function $(id){ return document.getElementById(id); }
+  function val(id){ return $(id).value.trim(); }
+
+  function showMsg(id, ok, text){
+    var el = $(id);
+    el.className = ok ? "msg msg-ok" : "msg msg-err";
+    el.textContent = String(text || "");
+    setTimeout(function(){ el.textContent = ""; el.className = "msg"; }, 8000);
+  }
+
+  function errMsg(d){
+    if (!d) return "Error desconocido";
+    if (typeof d === "string") return d;
+    if (d.detail){
+      if (typeof d.detail === "string") return d.detail;
+      if (Array.isArray(d.detail)) return d.detail.map(function(x){ return x.msg || JSON.stringify(x); }).join(", ");
+      return JSON.stringify(d.detail);
+    }
+    return JSON.stringify(d);
+  }
+
+  function api(method, path, body){
+    var opts = { method: method, headers: { "Content-Type": "application/json" } };
+    if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+    if (body) opts.body = JSON.stringify(body);
+    return fetch(API + path, opts).then(function(resp){
+      return resp.json().then(function(data){
+        return { status: resp.status, data: data };
+      }).catch(function(){
+        return { status: resp.status, data: { detail: "Respuesta no JSON (status " + resp.status + ")" } };
+      });
+    }).catch(function(err){
+      return { status: 0, data: { detail: "Error de red: " + err.message } };
+    });
+  }
+
+  $("btn-login").addEventListener("click", function(){
+    var email = val("login-email");
+    var password = $("login-password").value;
+    if (!email || !password){ showMsg("login-msg", false, "Ingrese email y password"); return; }
+    api("POST", "/auth/login", { email: email, password: password }).then(function(r){
+      if (r.status === 200){
+        TOKEN = r.data.access_token;
+        $("admin-email").textContent = email;
+        $("admin-credits").textContent = r.data.credits;
+        $("login-section").style.display = "none";
+        $("admin-section").style.display = "block";
+        loadUsers();
+      } else {
+        showMsg("login-msg", false, errMsg(r.data));
+      }
+    });
+  });
+
+  $("login-password").addEventListener("keydown", function(e){ if(e.key==="Enter") $("btn-login").click(); });
+
+  $("btn-logout").addEventListener("click", function(){
+    TOKEN = "";
+    $("login-section").style.display = "block";
+    $("admin-section").style.display = "none";
+    $("login-password").value = "";
+  });
+
+  function loadUsers(){
+    api("GET", "/admin/users").then(function(r){
+      var tb = $("users-table");
+      tb.innerHTML = "";
+      if (r.status === 200 && Array.isArray(r.data)){
+        r.data.forEach(function(u){
+          var tr = document.createElement("tr");
+          var role = u.is_admin ? "<span class=badge-admin>Admin</span>" : "<span class=badge-user>Usuario</span>";
+          tr.innerHTML = "<td>"+u.id+"</td><td>"+u.email+"</td><td>"+(u.full_name||"")+"</td><td>"+(u.company||"")+"</td><td><strong>"+u.credits+"</strong></td><td>"+role+"</td>";
+          tb.appendChild(tr);
+        });
+      } else {
+        tb.innerHTML = "<tr><td colspan=6>"+errMsg(r.data)+"</td></tr>";
+      }
+    });
+  }
+  $("btn-refresh-users").addEventListener("click", loadUsers);
+
+  $("btn-add-credits").addEventListener("click", function(){
+    var email = val("credit-email"), c = parseInt($("credit-amount").value)||0, reason = val("credit-reason");
+    if (!email || c < 1){ showMsg("credit-msg", false, "Email y cantidad requeridos"); return; }
+    api("POST", "/admin/add-credits", { email: email, credits: c, reason: reason || "Panel admin" }).then(function(r){
+      if (r.status === 200){ showMsg("credit-msg", true, r.data.credits_added+" creditos a "+r.data.email+". Balance: "+r.data.balance); loadUsers(); }
+      else { showMsg("credit-msg", false, errMsg(r.data)); }
+    });
+  });
+
+  $("btn-rm-credits").addEventListener("click", function(){
+    var email = val("rmcredit-email"), c = parseInt($("rmcredit-amount").value)||0, reason = val("rmcredit-reason");
+    if (!email || c < 1){ showMsg("rmcredit-msg", false, "Email y cantidad requeridos"); return; }
+    if (!confirm("Quitar "+c+" creditos a "+email+"?")) return;
+    api("POST", "/admin/remove-credits", { email: email, credits: c, reason: reason || "Ajuste admin" }).then(function(r){
+      if (r.status === 200){ showMsg("rmcredit-msg", true, "Quitados. Balance: "+r.data.balance); loadUsers(); }
+      else { showMsg("rmcredit-msg", false, errMsg(r.data)); }
+    });
+  });
+
+  $("btn-reset-pw").addEventListener("click", function(){
+    var email = val("pw-email"), pw = $("pw-new").value;
+    if (!email || !pw){ showMsg("pw-msg", false, "Email y password requeridos"); return; }
+    if (pw.length < 4){ showMsg("pw-msg", false, "Minimo 4 caracteres"); return; }
+    if (!confirm("Resetear password de "+email+"?")) return;
+    api("POST", "/admin/reset-password", { email: email, new_password: pw }).then(function(r){
+      if (r.status === 200){ showMsg("pw-msg", true, r.data.message || "OK"); }
+      else { showMsg("pw-msg", false, errMsg(r.data)); }
+    });
+  });
+
+  $("btn-make-admin").addEventListener("click", function(){
+    var email = val("makeadmin-email");
+    if (!email){ showMsg("makeadmin-msg", false, "Email requerido"); return; }
+    if (!confirm("Hacer admin a "+email+"?")) return;
+    api("POST", "/admin/make-admin?email="+encodeURIComponent(email)).then(function(r){
+      if (r.status === 200){ showMsg("makeadmin-msg", true, r.data.message || "OK"); loadUsers(); }
+      else { showMsg("makeadmin-msg", false, errMsg(r.data)); }
+    });
+  });
+})();
 </script>
 </body>
 </html>

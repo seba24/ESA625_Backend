@@ -62,6 +62,52 @@ class AddCreditsResponse(BaseModel):
     reason: str
 
 
+
+
+class RemoveCreditsRequest(BaseModel):
+    email: str
+    credits: int
+    reason: str = "Ajuste de creditos"
+
+
+@router.post("/remove-credits", response_model=AddCreditsResponse)
+def remove_credits(
+    req: RemoveCreditsRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Quitar creditos a un usuario (solo admin)."""
+    if req.credits <= 0:
+        raise HTTPException(400, "La cantidad debe ser positiva")
+
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    if user.credits < req.credits:
+        raise HTTPException(400, f"El usuario solo tiene {user.credits} creditos")
+
+    user.credits -= req.credits
+
+    txn = CreditTransaction(
+        user_id=user.id,
+        amount=-req.credits,
+        balance_after=user.credits,
+        description=f"QUITAR: {req.reason} (admin: {admin.email})",
+    )
+    db.add(txn)
+    db.commit()
+
+    log.info(f"Admin {admin.email} quito {req.credits} creditos a {user.email}. Balance: {user.credits}")
+
+    return AddCreditsResponse(
+        user_id=user.id,
+        email=user.email,
+        credits_added=-req.credits,
+        balance=user.credits,
+        reason=req.reason,
+    )
+
 class UserListResponse(BaseModel):
     id: int
     email: str

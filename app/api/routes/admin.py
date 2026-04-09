@@ -195,3 +195,57 @@ def get_login_attempts(
         )
         for a in attempts
     ]
+
+
+# ----------------------------------------------------------------------
+# Reset de password (admin)
+# ----------------------------------------------------------------------
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str
+
+
+class ResetPasswordResponse(BaseModel):
+    user_id: int
+    email: str
+    message: str
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+def reset_password(
+    req: ResetPasswordRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Resetear la password de un usuario (solo admin).
+
+    Caso de uso: usuario olvidó su password. El admin la resetea manualmente
+    vía este endpoint usando tools/admin_credits.py reset-password.
+
+    No requiere email SMTP ni link de recuperación — fix pragmático para el
+    bug "no hay recuperación de password" hasta implementar el flujo completo.
+    """
+    from app.core.security import hash_password
+
+    if len(req.new_password) < 4:
+        raise HTTPException(400, "La password debe tener al menos 4 caracteres")
+
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    user.hashed_password = hash_password(req.new_password)
+    db.commit()
+
+    log.info(
+        f"Admin {admin.email} reseteó la password de {user.email} "
+        f"(user_id={user.id})"
+    )
+
+    return ResetPasswordResponse(
+        user_id=user.id,
+        email=user.email,
+        message="Password reseteada exitosamente",
+    )

@@ -71,3 +71,13 @@ def health_check():
         "env": settings.app_env,
         "db": db_type,
     }
+
+
+# Panel admin web — HTML estático servido por FastAPI
+@app.get("/admin")
+def admin_panel():
+    """Panel de administración web. Requiere login admin vía la UI."""
+    from fastapi.responses import FileResponse
+    import os
+    html_path = os.path.join(os.path.dirname(__file__), "static", "admin.html")
+    return FileResponse(html_path, media_type="text/html")

@@ -213,6 +213,7 @@ def generate_report(
                 protocol=decrypted.get('protocol', {}),
                 analyzer=decrypted.get('analyzer', {}),
                 company=decrypted.get('company', {}),
+                company_id=decrypted.get('company_id'),
             )
         except InvalidToken:
             raise HTTPException(
@@ -254,39 +255,106 @@ def generate_report(
         "analyzer": req.analyzer,
     }
 
-    # Setear datos de empresa: por company_id (servidor) o por datos inline
+    # Setear datos de empresa.
+    # Prioridad de logo/firma:
+    #   1. logo_base64/signature_base64 inline en payload['company'] (gana siempre)
+    #   2. company_id apuntando a una empresa pre-sincronizada en la DB (fallback)
+    # Prioridad de campos de texto (name/address/etc):
+    #   1. company inline si trae datos
+    #   2. company_id si no hay inline
     generator = GeneratorClass()
     company_data = req.company or {}
+    import tempfile as _tf
 
+    log.info(f"[GEN] generator_class={type(generator).__name__} module={req.module}")
+    log.info(f"[GEN] company keys={list(company_data.keys()) if company_data else []}")
+    log.info(f"[GEN] req.company_id={req.company_id}")
+
+    # Branch 1: empresa pre-sincronizada (carga datos base desde DB)
+    db_logo_bytes = None
+    db_sig_bytes = None
     if req.company_id:
         from app.models.company import Company
         comp = db.query(Company).filter(
             Company.id == req.company_id, Company.user_id == user.id
         ).first()
         if comp:
-            company_data = {
-                "name": comp.name,
-                "address": comp.address,
-                "phone": comp.phone,
-                "email": comp.email,
-                "website": comp.website,
-                "technician": comp.technician,
-            }
-            # Logo y firma como archivos temporales para el generador
-            if comp.logo:
-                import tempfile as _tf
-                logo_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
-                logo_tmp.write(comp.logo)
-                logo_tmp.close()
-                generator.set_logo(logo_tmp.name) if hasattr(generator, 'set_logo') else None
-                generator._company_logo_tmp = logo_tmp.name
-            if comp.signature:
-                sig_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
-                sig_tmp.write(comp.signature)
-                sig_tmp.close()
-                if hasattr(generator, 'signature_path'):
-                    generator.signature_path = sig_tmp.name
-                generator._company_sig_tmp = sig_tmp.name
+            # Si el inline no trajo nombres, usar los de la DB
+            if not company_data.get("name"):
+                company_data = {
+                    "name": comp.name,
+                    "address": comp.address,
+                    "phone": comp.phone,
+                    "email": comp.email,
+                    "website": comp.website,
+                    "technician": comp.technician,
+                }
+            db_logo_bytes = comp.logo
+            db_sig_bytes = comp.signature
+            log.info(f"[GEN] DB lookup OK: db_logo={'YES' if db_logo_bytes else 'NO'} ({len(db_logo_bytes) if db_logo_bytes else 0}b) "
+                     f"db_sig={'YES' if db_sig_bytes else 'NO'} ({len(db_sig_bytes) if db_sig_bytes else 0}b)")
+        else:
+            log.warning(f"[GEN] company_id={req.company_id} no encontrado en DB para user_id={user.id}")
+
+    # Branch 2: logo/firma inline en base64 (pisan los de la DB si vienen)
+    inline_logo_b64 = company_data.get("logo_base64") or company_data.get("company_logo_base64")
+    inline_sig_b64 = company_data.get("signature_base64") or company_data.get("signature_image_base64")
+    log.info(f"[GEN] inline_logo_b64={'YES' if inline_logo_b64 else 'NO'} ({len(inline_logo_b64) if inline_logo_b64 else 0} chars) "
+             f"inline_sig_b64={'YES' if inline_sig_b64 else 'NO'} ({len(inline_sig_b64) if inline_sig_b64 else 0} chars)")
+
+    final_logo_bytes = None
+    if inline_logo_b64:
+        try:
+            final_logo_bytes = base64.b64decode(inline_logo_b64)
+            log.info(f"[GEN] logo decoded OK: {len(final_logo_bytes)} bytes")
+        except Exception as e:
+            log.warning(f"[GEN] Error decodificando logo_base64 inline: {e}")
+    if final_logo_bytes is None:
+        final_logo_bytes = db_logo_bytes
+
+    final_sig_bytes = None
+    if inline_sig_b64:
+        try:
+            final_sig_bytes = base64.b64decode(inline_sig_b64)
+            log.info(f"[GEN] sig decoded OK: {len(final_sig_bytes)} bytes")
+        except Exception as e:
+            log.warning(f"[GEN] Error decodificando signature_base64 inline: {e}")
+    if final_sig_bytes is None:
+        final_sig_bytes = db_sig_bytes
+
+    # Escribir a temp files y pasar al generator
+    if final_logo_bytes:
+        logo_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
+        logo_tmp.write(final_logo_bytes)
+        logo_tmp.close()
+        if hasattr(generator, 'set_logo'):
+            generator.set_logo(logo_tmp.name)
+            log.info(f"[GEN] logo set vía set_logo() -> {logo_tmp.name}")
+        else:
+            generator.logo_path = logo_tmp.name
+            log.info(f"[GEN] logo set vía logo_path attr -> {logo_tmp.name}")
+        generator._company_logo_tmp = logo_tmp.name
+        # Verificación post-set
+        log.info(f"[GEN] generator.logo_path después del set = {getattr(generator, 'logo_path', None)}")
+    else:
+        log.warning(f"[GEN] NO HAY final_logo_bytes — el PDF saldrá sin logo")
+
+    if final_sig_bytes:
+        sig_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
+        sig_tmp.write(final_sig_bytes)
+        sig_tmp.close()
+        # El base_report_generator usa signature_image_path; algunos legados usan signature_path
+        if hasattr(generator, 'signature_image_path'):
+            generator.signature_image_path = sig_tmp.name
+            log.info(f"[GEN] sig set vía signature_image_path -> {sig_tmp.name}")
+        elif hasattr(generator, 'signature_path'):
+            generator.signature_path = sig_tmp.name
+            log.info(f"[GEN] sig set vía signature_path -> {sig_tmp.name}")
+        else:
+            log.warning(f"[GEN] generator NO tiene signature_image_path ni signature_path — firma perdida")
+        generator._company_sig_tmp = sig_tmp.name
+    else:
+        log.warning(f"[GEN] NO HAY final_sig_bytes — el PDF saldrá sin firma")
 
     if company_data:
         generator.company_name = company_data.get("name", "")
@@ -295,6 +363,22 @@ def generate_report(
         generator.company_email = company_data.get("email", "")
         generator.company_website = company_data.get("website", "")
         generator.technician_name = company_data.get("technician", "")
+        # Scale y offsets del logo (si el generator los soporta)
+        for attr_in, attr_out in [
+            ("company_logo_scale", "company_logo_scale"),
+            ("company_logo_offset_x", "company_logo_offset_x"),
+            ("company_logo_offset_y", "company_logo_offset_y"),
+        ]:
+            if attr_in in company_data and hasattr(generator, attr_out):
+                try:
+                    setattr(generator, attr_out, int(company_data[attr_in]))
+                except (ValueError, TypeError):
+                    pass
+
+    # Estado final del generator antes de generar PDF
+    log.info(f"[GEN] FINAL state: logo_path={getattr(generator, 'logo_path', None)} "
+             f"signature_image_path={getattr(generator, 'signature_image_path', None)} "
+             f"company_name={getattr(generator, 'company_name', None)}")
 
     # Generar PDF en memoria
     import tempfile, os

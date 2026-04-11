@@ -36,6 +36,7 @@ class CompanyCreate(BaseModel):
     signature_y: float = 0.0
     signature_width: float = 0.0
     signature_height: float = 0.0
+    report_title_template: Optional[str] = None
 
 
 class CompanyUpdate(BaseModel):
@@ -55,6 +56,7 @@ class CompanyUpdate(BaseModel):
     signature_y: Optional[float] = None
     signature_width: Optional[float] = None
     signature_height: Optional[float] = None
+    report_title_template: Optional[str] = None
 
 
 class CompanyResponse(BaseModel):
@@ -75,6 +77,7 @@ class CompanyResponse(BaseModel):
     signature_y: float
     signature_width: float
     signature_height: float
+    report_title_template: Optional[str] = None
     created_at: str
 
     model_config = {"from_attributes": True}
@@ -90,6 +93,7 @@ def _to_response(c: Company) -> CompanyResponse:
         has_signature=c.signature is not None,
         signature_x=c.signature_x, signature_y=c.signature_y,
         signature_width=c.signature_width, signature_height=c.signature_height,
+        report_title_template=c.report_title_template,
         created_at=c.created_at.isoformat(),
     )
 
@@ -128,6 +132,7 @@ def create_company(
         signature=sig_bytes,
         signature_x=req.signature_x, signature_y=req.signature_y,
         signature_width=req.signature_width, signature_height=req.signature_height,
+        report_title_template=req.report_title_template,
     )
     db.add(company)
     db.commit()
@@ -183,6 +188,8 @@ def update_company(
         company.signature_width = req.signature_width
     if req.signature_height is not None:
         company.signature_height = req.signature_height
+    if req.report_title_template is not None:
+        company.report_title_template = req.report_title_template
 
     db.commit()
     db.refresh(company)

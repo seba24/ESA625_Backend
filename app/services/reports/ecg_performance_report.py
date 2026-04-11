@@ -37,7 +37,8 @@ class ECGPerformanceReportGenerator(BaseReportGenerator):
     La primera página tiene el mismo formato que seguridad eléctrica.
     """
 
-    MODULE_TITLE = "PRUEBA DE ECG PERFORMANCE"
+    MODULE_NAME = "ECG PERFORMANCE"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — ECG PERFORMANCE"
     MODULE_SUBTITLE = "Simulador de Señales ECG"
     MODULE_STANDARD = "IEC 60601-2-25"
 

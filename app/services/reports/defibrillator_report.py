@@ -46,7 +46,8 @@ class DefibrillatorReportGenerator(BaseReportGenerator):
     """
 
     # Configuración del módulo
-    MODULE_TITLE = "PRUEBA DE DESFIBRILADOR"
+    MODULE_NAME = "DESFIBRILADOR"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — DESFIBRILADOR"
     MODULE_SUBTITLE = "Analizador Impulse 6000D/7000DP"
     MODULE_STANDARD = "IEC 60601-2-4"
 

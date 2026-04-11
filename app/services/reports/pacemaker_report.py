@@ -26,7 +26,8 @@ log = logging.getLogger(__name__)
 class PacemakerReportGenerator(BaseReportGenerator):
     """Generador de reportes PDF para pruebas de marcapasos."""
 
-    MODULE_TITLE = "PRUEBA DE MARCAPASOS"
+    MODULE_NAME = "MARCAPASOS"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — MARCAPASOS"
     MODULE_SUBTITLE = "Analizador de Marcapasos"
     MODULE_STANDARD = "IEC 60601-2-31"
 

@@ -18,7 +18,8 @@ log = logging.getLogger(__name__)
 class PatientSimulationReportGenerator(BaseReportGenerator):
     """Generador de reportes para el módulo de Simulación de Paciente."""
 
-    MODULE_TITLE = "SIMULACIÓN DE PACIENTE"
+    MODULE_NAME = "SIMULACIÓN DE PACIENTE"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — SIMULACIÓN DE PACIENTE"
     MODULE_SUBTITLE = "Simulador ECG"
     MODULE_STANDARD = "Verificación funcional"
 

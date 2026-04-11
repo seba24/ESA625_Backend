@@ -33,7 +33,8 @@ class VentilatorReportGenerator(BaseReportGenerator):
     La primera página tiene el mismo formato que los demás módulos.
     """
 
-    MODULE_TITLE = "PRUEBA DE VENTILADOR"
+    MODULE_NAME = "VENTILADOR"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — VENTILADOR"
     MODULE_SUBTITLE = "Analizador de Ventilación Mecánica"
     MODULE_STANDARD = "ISO 80601-2-12"
 

@@ -37,6 +37,10 @@ class Company(Base):
     signature_width: Mapped[float] = mapped_column(Float, default=0.0)
     signature_height: Mapped[float] = mapped_column(Float, default=0.0)
     protocol_key: Mapped[str] = mapped_column(String(255), default=_generate_fernet_key)
+    # Template del título de reportes PDF. Soporta {module} como placeholder
+    # que se reemplaza en runtime por el nombre del módulo (MARCAPASOS,
+    # DESFIBRILADOR, etc.). Si está vacío, se usa el default del generator.
+    report_title_template: Mapped[str] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

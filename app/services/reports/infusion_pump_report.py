@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 class InfusionPumpReportGenerator(BaseReportGenerator):
     """Generador de reportes PDF para pruebas de bombas de infusión."""
 
-    MODULE_TITLE = "PRUEBA DE BOMBA DE INFUSIÓN"
+    MODULE_NAME = "BOMBA DE INFUSIÓN"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — BOMBA DE INFUSIÓN"
     MODULE_SUBTITLE = "Analizador de Dispositivos de Infusión"
     MODULE_STANDARD = "IEC 60601-2-24"
 

@@ -23,7 +23,7 @@ GUÍA PARA CREAR NUEVOS MÓDULOS (ECG Performance, Marcapasos, etc.):
 1. Crear clase que herede de BaseReportGenerator:
 
    class ECGPerformanceReportGenerator(BaseReportGenerator):
-       MODULE_TITLE = "PRUEBA DE ECG PERFORMANCE"
+       MODULE_TITLE = "VALIDACIÓN TRAZABLE — ECG PERFORMANCE"
        MODULE_SUBTITLE = "Simulador de Paciente"
        MODULE_STANDARD = "IEC 60601-2-25"
 
@@ -203,7 +203,7 @@ class BaseReportGenerator(ABC):
     """
 
     # Configuración del módulo - debe ser sobreescrita por subclases
-    MODULE_TITLE = "REPORTE DE PRUEBA"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE"
     MODULE_SUBTITLE = "Sistema ESA620"
     MODULE_STANDARD = "IEC 60601-1"
 

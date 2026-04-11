@@ -26,7 +26,8 @@ log = logging.getLogger(__name__)
 class ESUReportGenerator(BaseReportGenerator):
     """Generador de reportes PDF para pruebas de electrobisturi."""
 
-    MODULE_TITLE = "PRUEBA DE ELECTROBISTURI"
+    MODULE_NAME = "ELECTROBISTURÍ"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — ELECTROBISTURÍ"
     MODULE_SUBTITLE = "Analizador de Unidad Electroquirurgica"
     MODULE_STANDARD = "IEC 60601-2-2"
 

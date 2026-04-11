@@ -46,7 +46,8 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
     La primera página tiene el mismo formato que los demás módulos.
     """
 
-    MODULE_TITLE = "TEST DE SEGURIDAD ELÉCTRICA"
+    MODULE_NAME = "SEGURIDAD ELÉCTRICA"
+    MODULE_TITLE = "VALIDACIÓN TRAZABLE — SEGURIDAD ELÉCTRICA"
     MODULE_SUBTITLE = "Analizador de Seguridad Eléctrica"
     MODULE_STANDARD = "IEC 62353 / IEC 60601-1"
 

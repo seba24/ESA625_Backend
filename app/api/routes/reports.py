@@ -266,13 +266,10 @@ def generate_report(
     company_data = req.company or {}
     import tempfile as _tf
 
-    log.info(f"[GEN] generator_class={type(generator).__name__} module={req.module}")
-    log.info(f"[GEN] company keys={list(company_data.keys()) if company_data else []}")
-    log.info(f"[GEN] req.company_id={req.company_id}")
-
     # Branch 1: empresa pre-sincronizada (carga datos base desde DB)
     db_logo_bytes = None
     db_sig_bytes = None
+    db_title_template = None
     if req.company_id:
         from app.models.company import Company
         comp = db.query(Company).filter(
@@ -291,24 +288,18 @@ def generate_report(
                 }
             db_logo_bytes = comp.logo
             db_sig_bytes = comp.signature
-            log.info(f"[GEN] DB lookup OK: db_logo={'YES' if db_logo_bytes else 'NO'} ({len(db_logo_bytes) if db_logo_bytes else 0}b) "
-                     f"db_sig={'YES' if db_sig_bytes else 'NO'} ({len(db_sig_bytes) if db_sig_bytes else 0}b)")
-        else:
-            log.warning(f"[GEN] company_id={req.company_id} no encontrado en DB para user_id={user.id}")
+            db_title_template = comp.report_title_template
 
     # Branch 2: logo/firma inline en base64 (pisan los de la DB si vienen)
     inline_logo_b64 = company_data.get("logo_base64") or company_data.get("company_logo_base64")
     inline_sig_b64 = company_data.get("signature_base64") or company_data.get("signature_image_base64")
-    log.info(f"[GEN] inline_logo_b64={'YES' if inline_logo_b64 else 'NO'} ({len(inline_logo_b64) if inline_logo_b64 else 0} chars) "
-             f"inline_sig_b64={'YES' if inline_sig_b64 else 'NO'} ({len(inline_sig_b64) if inline_sig_b64 else 0} chars)")
 
     final_logo_bytes = None
     if inline_logo_b64:
         try:
             final_logo_bytes = base64.b64decode(inline_logo_b64)
-            log.info(f"[GEN] logo decoded OK: {len(final_logo_bytes)} bytes")
         except Exception as e:
-            log.warning(f"[GEN] Error decodificando logo_base64 inline: {e}")
+            log.warning(f"Error decodificando logo_base64 inline: {e}")
     if final_logo_bytes is None:
         final_logo_bytes = db_logo_bytes
 
@@ -316,9 +307,8 @@ def generate_report(
     if inline_sig_b64:
         try:
             final_sig_bytes = base64.b64decode(inline_sig_b64)
-            log.info(f"[GEN] sig decoded OK: {len(final_sig_bytes)} bytes")
         except Exception as e:
-            log.warning(f"[GEN] Error decodificando signature_base64 inline: {e}")
+            log.warning(f"Error decodificando signature_base64 inline: {e}")
     if final_sig_bytes is None:
         final_sig_bytes = db_sig_bytes
 
@@ -329,15 +319,9 @@ def generate_report(
         logo_tmp.close()
         if hasattr(generator, 'set_logo'):
             generator.set_logo(logo_tmp.name)
-            log.info(f"[GEN] logo set vía set_logo() -> {logo_tmp.name}")
         else:
             generator.logo_path = logo_tmp.name
-            log.info(f"[GEN] logo set vía logo_path attr -> {logo_tmp.name}")
         generator._company_logo_tmp = logo_tmp.name
-        # Verificación post-set
-        log.info(f"[GEN] generator.logo_path después del set = {getattr(generator, 'logo_path', None)}")
-    else:
-        log.warning(f"[GEN] NO HAY final_logo_bytes — el PDF saldrá sin logo")
 
     if final_sig_bytes:
         sig_tmp = _tf.NamedTemporaryFile(suffix=".png", delete=False)
@@ -346,15 +330,9 @@ def generate_report(
         # El base_report_generator usa signature_image_path; algunos legados usan signature_path
         if hasattr(generator, 'signature_image_path'):
             generator.signature_image_path = sig_tmp.name
-            log.info(f"[GEN] sig set vía signature_image_path -> {sig_tmp.name}")
         elif hasattr(generator, 'signature_path'):
             generator.signature_path = sig_tmp.name
-            log.info(f"[GEN] sig set vía signature_path -> {sig_tmp.name}")
-        else:
-            log.warning(f"[GEN] generator NO tiene signature_image_path ni signature_path — firma perdida")
         generator._company_sig_tmp = sig_tmp.name
-    else:
-        log.warning(f"[GEN] NO HAY final_sig_bytes — el PDF saldrá sin firma")
 
     if company_data:
         generator.company_name = company_data.get("name", "")
@@ -375,10 +353,32 @@ def generate_report(
                 except (ValueError, TypeError):
                     pass
 
-    # Estado final del generator antes de generar PDF
-    log.info(f"[GEN] FINAL state: logo_path={getattr(generator, 'logo_path', None)} "
-             f"signature_image_path={getattr(generator, 'signature_image_path', None)} "
-             f"company_name={getattr(generator, 'company_name', None)}")
+    # Aplicar template del título de reporte (si existe).
+    # Prioridad: inline en company > DB de empresa pre-sincronizada > default del generator.
+    # El template puede contener {module} como placeholder, que se reemplaza por
+    # el nombre del módulo extraído desde MODULE_NAME del generator (si existe)
+    # o desde MODULE_TITLE como fallback.
+    inline_title_template = company_data.get("report_title_template")
+    final_title_template = inline_title_template if inline_title_template else db_title_template
+    if final_title_template:
+        # Sanitizar: max 500 chars y quitar caracteres de control
+        clean_template = ''.join(c for c in str(final_title_template)[:500] if c.isprintable() or c == ' ')
+        if clean_template:
+            module_name = getattr(generator, 'MODULE_NAME', None)
+            if not module_name:
+                # Fallback: extraer desde MODULE_TITLE eliminando prefijos comunes
+                _t = getattr(generator, 'MODULE_TITLE', '') or ''
+                if '—' in _t:
+                    module_name = _t.split('—', 1)[1].strip()
+                elif ' DE ' in _t:
+                    module_name = _t.split(' DE ', 1)[1].strip()
+                else:
+                    module_name = _t
+            try:
+                generator.MODULE_TITLE = clean_template.format(module=module_name)
+            except (KeyError, IndexError):
+                # Template con placeholder mal formado: usarlo literal
+                generator.MODULE_TITLE = clean_template
 
     # Generar PDF en memoria
     import tempfile, os

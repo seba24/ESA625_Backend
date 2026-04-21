@@ -118,10 +118,21 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
                     })
             measurements = meas_list
 
-        # Calcular contadores
-        passed = sum(1 for m in measurements if m.get('passed', False)
-                     or m.get('evaluation', '') == 'PASS')
-        failed = sum(1 for m in measurements if not m.get('passed', True)
+        # Calcular contadores. Las mediciones sin límite (mains_voltage,
+        # equipment_current) son informativas — no cuentan ni como passed ni
+        # como failed para la evaluación global del test.
+        def _is_informative(m):
+            ev = m.get('evaluation', '')
+            lim = m.get('limit', m.get('tolerance', ''))
+            no_limit = lim in (None, '', 'N/A', 'None', 'null') or str(lim).strip() == ''
+            return ev in ('NOT_EVALUATED', 'NO EVALUADO', 'PENDING') or no_limit
+
+        passed = sum(1 for m in measurements
+                     if not _is_informative(m)
+                     and (m.get('passed', False) or m.get('evaluation', '') == 'PASS'))
+        failed = sum(1 for m in measurements
+                     if not _is_informative(m)
+                     and not m.get('passed', True)
                      and m.get('evaluation', 'PASS') != 'PASS')
         total = len(measurements)
         test_passed = (failed == 0 and passed > 0)
@@ -279,6 +290,16 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
                 evaluation = 'PASS' if passed else 'FAIL'
 
             is_pass = evaluation in ('PASS', 'APROBADO')
+            # Mediciones sin límite son informativas (mains_voltage, equipment_current).
+            # Si no hay límite definido, NO se marca como RECHAZADO.
+            has_limit = (
+                limit_val not in (None, '', 'N/A', 'None', 'null')
+                and str(limit_val).strip() != ''
+            )
+            is_not_evaluated = (
+                evaluation in ('NOT_EVALUATED', 'NO EVALUADO', 'PENDING')
+                or not has_limit
+            )
 
             # Formatear valor
             if isinstance(measured, (int, float)):
@@ -286,8 +307,11 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
             else:
                 meas_str = str(measured)
 
-            limit_str = str(limit_val) if limit_val else ""
-            eval_str = "APROBADO" if is_pass else "RECHAZADO"
+            limit_str = str(limit_val) if has_limit else ""
+            if is_not_evaluated and not is_pass:
+                eval_str = "INFORMATIVO"
+            else:
+                eval_str = "APROBADO" if is_pass else "RECHAZADO"
 
             data.append([param_name, meas_str, unit, limit_str, eval_str])
 
@@ -300,6 +324,10 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
                                 self.COLOR_ACENTO)
                 table_style.add('FONTNAME', (4, row_index), (4, row_index),
                                 'Helvetica-Bold')
+            elif is_not_evaluated:
+                # Gris neutro — no resaltar fila ni texto en rojo
+                table_style.add('TEXTCOLOR', (4, row_index), (4, row_index),
+                                self.COLOR_GRIS_MEDIO)
             else:
                 table_style.add('BACKGROUND', (0, row_index), (-1, row_index),
                                 colors.HexColor('#fee2e2'))

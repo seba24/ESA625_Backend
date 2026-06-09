@@ -295,3 +295,217 @@ def reset_password(
         email=user.email,
         message="Password reseteada exitosamente",
     )
+
+
+# ----------------------------------------------------------------------
+# Suscripciones (#870 Fase 1)
+# ----------------------------------------------------------------------
+
+class GrantSubscriptionRequest(BaseModel):
+    email: str
+    module_id: str
+    period: str  # 'monthly' | 'quarterly' | 'semester' | 'annual'
+    months: Optional[int] = None  # opcional: si no se pasa, usa la duracion del periodo
+    notes: str = "Asignacion manual de admin"
+
+
+class GrantSubscriptionResponse(BaseModel):
+    subscription_id: int
+    user_email: str
+    module_id: str
+    period: str
+    started_at: str
+    expires_at: str
+    days_left: int
+
+
+@router.post("/grant-subscription", response_model=GrantSubscriptionResponse)
+def grant_subscription(
+    req: GrantSubscriptionRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Asigna una suscripcion manual a un usuario (solo admin).
+
+    Para demos a clientes, regalos, soporte. NO pasa por Mercado Pago.
+
+    Si el usuario ya tiene una suscripcion activa para ese modulo, EXTIENDE
+    su expires_at sumando la duracion del periodo (no crea fila nueva).
+    """
+    from datetime import datetime, timezone, timedelta
+    from app.models.subscription import (
+        Subscription,
+        ALLOWED_MODULE_IDS,
+        ALLOWED_PERIODS,
+        PERIOD_DAYS,
+    )
+
+    if req.module_id not in ALLOWED_MODULE_IDS:
+        raise HTTPException(400, f"module_id invalido. Permitidos: {sorted(ALLOWED_MODULE_IDS)}")
+    if req.period not in ALLOWED_PERIODS:
+        raise HTTPException(400, f"period invalido. Permitidos: {sorted(ALLOWED_PERIODS)}")
+
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    # Duracion: por defecto la del periodo, o `months` si se paso explicito
+    days_to_add = (
+        req.months * 30 if req.months and req.months > 0 else PERIOD_DAYS[req.period]
+    )
+    now = datetime.now(timezone.utc)
+
+    # Buscar suscripcion activa existente para extenderla
+    existing = (
+        db.query(Subscription)
+        .filter(
+            Subscription.user_id == user.id,
+            Subscription.module_id == req.module_id,
+            Subscription.status == "active",
+            Subscription.expires_at > now,
+        )
+        .order_by(Subscription.expires_at.desc())
+        .first()
+    )
+
+    if existing:
+        # Extender desde el expires_at actual
+        existing.expires_at = existing.expires_at + timedelta(days=days_to_add)
+        existing.period = req.period
+        existing.notes = (existing.notes + f"\n[ext {now.date()}] {req.notes}").strip()
+        existing.updated_at = now
+        sub = existing
+        log.info(
+            f"Admin {admin.email} EXTENDIO suscripcion #{sub.id} de {user.email} "
+            f"a {req.module_id} hasta {sub.expires_at.isoformat()}"
+        )
+    else:
+        # Crear nueva
+        sub = Subscription(
+            user_id=user.id,
+            module_id=req.module_id,
+            period=req.period,
+            started_at=now,
+            expires_at=now + timedelta(days=days_to_add),
+            status="active",
+            amount_paid_usd=0,
+            amount_paid_ars=0,
+            auto_renew=False,
+            granted_by_admin_id=admin.id,
+            notes=req.notes,
+        )
+        db.add(sub)
+        log.info(
+            f"Admin {admin.email} CREO suscripcion de {user.email} "
+            f"a {req.module_id} ({req.period}) hasta "
+            f"{(now + timedelta(days=days_to_add)).isoformat()}"
+        )
+
+    db.commit()
+    db.refresh(sub)
+
+    return GrantSubscriptionResponse(
+        subscription_id=sub.id,
+        user_email=user.email,
+        module_id=sub.module_id,
+        period=sub.period,
+        started_at=sub.started_at.isoformat(),
+        expires_at=sub.expires_at.isoformat(),
+        days_left=sub.days_left(),
+    )
+
+
+class RevokeSubscriptionRequest(BaseModel):
+    email: str
+    module_id: str
+    reason: str = "Revocada por admin"
+
+
+@router.post("/revoke-subscription")
+def revoke_subscription(
+    req: RevokeSubscriptionRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Revoca (cancela) la suscripcion activa de un usuario para un modulo.
+
+    Marca status='cancelled' pero NO borra la fila. El cliente perdera acceso
+    inmediatamente (validacion online del expires_at + status).
+    """
+    from app.models.subscription import Subscription
+
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    sub = (
+        db.query(Subscription)
+        .filter(
+            Subscription.user_id == user.id,
+            Subscription.module_id == req.module_id,
+            Subscription.status == "active",
+        )
+        .order_by(Subscription.expires_at.desc())
+        .first()
+    )
+    if not sub:
+        raise HTTPException(404, "No hay suscripcion activa para revocar")
+
+    sub.status = "cancelled"
+    sub.notes = (sub.notes + f"\n[REVOCADA por {admin.email}] {req.reason}").strip()
+    db.commit()
+
+    log.info(
+        f"Admin {admin.email} REVOCO suscripcion #{sub.id} "
+        f"de {user.email} a {req.module_id}: {req.reason}"
+    )
+    return {
+        "subscription_id": sub.id,
+        "user_email": user.email,
+        "module_id": sub.module_id,
+        "status": sub.status,
+        "message": "Suscripcion revocada",
+    }
+
+
+@router.get("/list-subscriptions")
+def list_all_subscriptions(
+    email: Optional[str] = Query(None, description="Filtrar por email de usuario"),
+    module_id: Optional[str] = Query(None, description="Filtrar por modulo"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por status"),
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Lista todas las suscripciones del sistema (solo admin).
+
+    Para auditoria y soporte. Si se filtra por email, solo las de ese usuario.
+    """
+    from app.models.subscription import Subscription
+
+    query = db.query(Subscription, User).join(User, Subscription.user_id == User.id)
+
+    if email:
+        query = query.filter(User.email == email)
+    if module_id:
+        query = query.filter(Subscription.module_id == module_id)
+    if status_filter:
+        query = query.filter(Subscription.status == status_filter)
+
+    rows = query.order_by(Subscription.expires_at.desc()).limit(500).all()
+
+    return [
+        {
+            "id": s.id,
+            "user_email": u.email,
+            "module_id": s.module_id,
+            "period": s.period,
+            "started_at": s.started_at.isoformat(),
+            "expires_at": s.expires_at.isoformat(),
+            "status": s.status,
+            "days_left": s.days_left(),
+            "auto_renew": s.auto_renew,
+            "amount_paid_usd": float(s.amount_paid_usd),
+            "notes": s.notes,
+        }
+        for s, u in rows
+    ]

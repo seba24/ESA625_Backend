@@ -36,12 +36,24 @@ tr:hover td{background:#162032}
 .status-bar{display:flex;gap:20px;background:#1e293b;padding:10px 16px;border-radius:8px;margin-bottom:20px;font-size:.85em;flex-wrap:wrap}
 .status-bar .item{display:flex;align-items:center;gap:6px}
 .dot{width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block}
+.header-logo{display:block;margin:0 auto 16px;max-height:80px;width:auto;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.4))}
+.header-block{text-align:center;margin-bottom:24px}
+.header-block h1{margin-bottom:6px}
+.header-block .subtitle{margin-bottom:0}
+.pricing-row td{padding:6px 12px}
+.pricing-row input.price-input{width:100px;text-align:right;background:#0f172a;border:1px solid #334155;color:#fbbf24;padding:6px 8px;border-radius:4px;font-weight:600}
+.pricing-row input.price-input:focus{border-color:#fbbf24;outline:none}
+.pricing-row button.save-btn{padding:4px 10px;font-size:.8em;background:#15803d}
+.pricing-row button.save-btn:hover{background:#16a34a}
 </style>
 </head>
 <body>
 <div class="container">
+<div class="header-block">
+<img src="/static/logo_src.png" alt="SR Certificaciones" class="header-logo" onerror="this.style.display='none'">
 <h1>ESA625 Cloud Admin</h1>
 <p class="subtitle">SR Certificaciones SRL - Panel de administracion</p>
+</div>
 
 <div id="login-section" class="card">
 <h2>Iniciar sesion admin</h2>
@@ -168,6 +180,14 @@ tr:hover td{background:#162032}
 </select></div>
 <div class="form-row"><button id="btn-calc-price">Calcular Precio</button></div>
 <div id="price-result" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+<h2>Configuracion de precios</h2>
+<p style="color:#64748b;font-size:.85em;margin-bottom:10px">Editar precios mensuales USD y multiplicadores de descuento. Los cambios se aplican inmediatamente (cache invalidado).</p>
+<button class="secondary" id="btn-load-pricing" style="margin-bottom:10px">Cargar configuracion</button>
+<table><thead><tr><th>Clave</th><th>Valor</th><th>Descripcion</th><th>Accion</th></tr></thead><tbody id="pricing-table"></tbody></table>
+<div id="pricing-msg"></div>
 </div>
 
 </div>
@@ -439,11 +459,69 @@ tr:hover td{background:#162032}
     });
   });
 
-  // Cargar suscripciones al loguear (se llama desde loadUsers via login)
+  // ============================================================
+  // Edicion de precios (#870 Fase 1 ext)
+  // ============================================================
+
+  function loadPricing(){
+    api("GET", "/admin/pricing-config").then(function(r){
+      var tb = $("pricing-table");
+      tb.innerHTML = "";
+      if (r.status === 200 && Array.isArray(r.data)){
+        if (r.data.length === 0){
+          tb.innerHTML = "<tr><td colspan=4 style='color:#fbbf24;text-align:center;padding:20px'>Tabla vacia - aplicar migration 004_pricing_config.sql en Neon</td></tr>";
+          return;
+        }
+        r.data.forEach(function(item){
+          var tr = document.createElement("tr");
+          tr.className = "pricing-row";
+          tr.innerHTML =
+            "<td><code style='color:#94a3b8'>" + item.key + "</code></td>" +
+            "<td><input type='number' step='0.0001' class='price-input' value='" + item.value + "' data-key='" + item.key + "'></td>" +
+            "<td style='font-size:.85em;color:#94a3b8'>" + (item.description || "") + "</td>" +
+            "<td></td>";
+          var saveBtn = document.createElement("button");
+          saveBtn.className = "save-btn";
+          saveBtn.textContent = "Guardar";
+          saveBtn.addEventListener("click", function(){
+            var input = tr.querySelector("input.price-input");
+            var newValue = parseFloat(input.value);
+            if (isNaN(newValue) || newValue < 0){
+              showMsg("pricing-msg", false, "Valor invalido");
+              return;
+            }
+            updatePricing(item.key, newValue);
+          });
+          tr.lastChild.appendChild(saveBtn);
+          tb.appendChild(tr);
+        });
+      } else {
+        tb.innerHTML = "<tr><td colspan=4>" + errMsg(r.data) + "</td></tr>";
+      }
+    });
+  }
+
+  function updatePricing(key, value){
+    api("PUT", "/admin/pricing-config", { key: key, value: value }).then(function(r){
+      if (r.status === 200){
+        showMsg("pricing-msg", true,
+          "OK: " + r.data.key + " " + r.data.old_value + " -> " + r.data.new_value);
+        // Recargar para mostrar el valor confirmado
+        loadPricing();
+      } else {
+        showMsg("pricing-msg", false, errMsg(r.data));
+      }
+    });
+  }
+
+  $("btn-load-pricing").addEventListener("click", loadPricing);
+
+  // Cargar suscripciones y pricing al loguear (se llama desde loadUsers via login)
   var origLoadUsers = loadUsers;
   loadUsers = function(){
     origLoadUsers();
     loadSubs();
+    loadPricing();
   };
 })();
 </script>

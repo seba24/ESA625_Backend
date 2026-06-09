@@ -468,6 +468,89 @@ def revoke_subscription(
     }
 
 
+# ----------------------------------------------------------------------
+# Configuracion de precios (#870 Fase 1 ext)
+# ----------------------------------------------------------------------
+
+class PricingConfigItem(BaseModel):
+    key: str
+    value: float
+    description: str
+    updated_at: Optional[str] = None
+
+
+class UpdatePricingRequest(BaseModel):
+    key: str
+    value: float
+
+
+@router.get("/pricing-config", response_model=List[PricingConfigItem])
+def get_pricing_config(
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Lista todas las claves de pricing_config con sus valores y descripciones.
+
+    Para mostrar en la pestaña 'Configuracion de precios' del panel admin.
+    Si la tabla esta vacia (DB recien creada sin seed), devuelve lista vacia
+    y el admin tiene que aplicar la migracion 004.
+    """
+    from app.models.pricing_config import PricingConfig
+
+    rows = db.query(PricingConfig).order_by(PricingConfig.key).all()
+    return [
+        PricingConfigItem(
+            key=r.key,
+            value=float(r.value),
+            description=r.description,
+            updated_at=r.updated_at.isoformat() if r.updated_at else None,
+        )
+        for r in rows
+    ]
+
+
+@router.put("/pricing-config")
+def update_pricing_config(
+    req: UpdatePricingRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Actualiza UN valor de pricing_config y invalida el cache del servicio.
+
+    Solo permite editar claves que ya existen (no se pueden crear nuevas
+    desde el admin para evitar errores). Si querias agregar una clave nueva,
+    se hace via migracion SQL.
+    """
+    from app.models.pricing_config import PricingConfig
+    from app.services.pricing import invalidate_cache as _invalidate_pricing_cache
+
+    if req.value < 0:
+        raise HTTPException(400, "El valor debe ser >= 0")
+
+    row = db.query(PricingConfig).filter(PricingConfig.key == req.key).first()
+    if not row:
+        raise HTTPException(404, f"Clave de pricing no existe: {req.key}. Use migracion SQL para agregarla.")
+
+    old_value = float(row.value)
+    row.value = req.value
+    row.updated_by_admin_id = admin.id
+    db.commit()
+
+    # Invalidar el cache del servicio para que el proximo calculo lea el nuevo valor
+    _invalidate_pricing_cache()
+
+    log.info(
+        f"Admin {admin.email} actualizo pricing {req.key}: "
+        f"{old_value} -> {req.value}"
+    )
+    return {
+        "key": req.key,
+        "old_value": old_value,
+        "new_value": req.value,
+        "message": "Precio actualizado, cache invalidado",
+    }
+
+
 @router.get("/list-subscriptions")
 def list_all_subscriptions(
     email: Optional[str] = Query(None, description="Filtrar por email de usuario"),

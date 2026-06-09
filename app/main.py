@@ -82,3 +82,12 @@ def admin_panel():
     import os
     html_path = os.path.join(os.path.dirname(__file__), "static", "admin.html")
     return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/static/logo_src.png")
+def logo_src():
+    """Logo SR Certificaciones servido como estatico publico para el panel admin."""
+    from fastapi.responses import FileResponse
+    import os
+    logo_path = os.path.join(os.path.dirname(__file__), "static", "logo_src.png")
+    return FileResponse(logo_path, media_type="image/png")

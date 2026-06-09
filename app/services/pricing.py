@@ -26,21 +26,14 @@ Conversion USD -> ARS: cotizacion USD oficial BNA al momento del calculo.
 """
 
 import logging
+import time
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
 
-# Precio base mensual por modulo en USD
-MODULE_PRICES_USD: Dict[str, Decimal] = {
-    "service_enterprise":     Decimal("25"),
-    "biomedical_engineering": Decimal("35"),
-    "proposal_generator":     Decimal("15"),
-    "knowledge_base":         Decimal("10"),
-}
-
-# Display name de cada modulo para mostrar al cliente
+# Display name de cada modulo (NO se edita desde admin, es identidad del modulo).
 MODULE_DISPLAY_NAMES: Dict[str, str] = {
     "service_enterprise":     "Empresa de Servicio (SE)",
     "biomedical_engineering": "Ingenieria Biomedica (IB)",
@@ -48,7 +41,7 @@ MODULE_DISPLAY_NAMES: Dict[str, str] = {
     "knowledge_base":         "Base de Conocimiento (KB)",
 }
 
-# Meses de cada periodo
+# Meses de cada periodo (NO se edita - es identidad del periodo).
 PERIOD_MONTHS: Dict[str, int] = {
     "monthly":   1,
     "quarterly": 3,
@@ -56,21 +49,131 @@ PERIOD_MONTHS: Dict[str, int] = {
     "annual":    12,
 }
 
-# Multiplicador de descuento por periodo (sobre el total mensual * meses)
-PERIOD_MULTIPLIERS: Dict[str, Decimal] = {
+
+# ============================================================
+# Defaults: usados como fallback si la DB no responde y como
+# valores iniciales si la tabla pricing_config esta vacia.
+# La fuente de verdad es la DB (tabla pricing_config).
+# ============================================================
+
+_DEFAULT_MODULE_PRICES_USD: Dict[str, Decimal] = {
+    "service_enterprise":     Decimal("25"),
+    "biomedical_engineering": Decimal("35"),
+    "proposal_generator":     Decimal("15"),
+    "knowledge_base":         Decimal("10"),
+}
+
+_DEFAULT_PERIOD_MULTIPLIERS: Dict[str, Decimal] = {
     "monthly":   Decimal("1.00"),
     "quarterly": Decimal("0.90"),
     "semester":  Decimal("0.83"),
     "annual":    Decimal("0.78"),
 }
 
-# Multiplicador de descuento por cantidad de modulos
-QUANTITY_MULTIPLIERS: Dict[int, Decimal] = {
+_DEFAULT_QUANTITY_MULTIPLIERS: Dict[int, Decimal] = {
     1: Decimal("1.00"),
     2: Decimal("0.95"),
     3: Decimal("0.90"),
     4: Decimal("0.80"),
 }
+
+
+# ============================================================
+# Cache en memoria de los valores leidos de DB.
+# TTL: 5 minutos. Cuando un admin actualiza un precio, se invalida
+# explicitamente via invalidate_cache().
+# ============================================================
+
+_CACHE_TTL_SECONDS = 300
+_cache_loaded_at: float = 0.0
+_cache_module_prices: Dict[str, Decimal] = {}
+_cache_period_mults: Dict[str, Decimal] = {}
+_cache_quantity_mults: Dict[int, Decimal] = {}
+
+
+def invalidate_cache() -> None:
+    """Forzar recarga desde DB en el proximo calculo. Llamar desde el
+    endpoint admin tras actualizar un precio."""
+    global _cache_loaded_at
+    _cache_loaded_at = 0.0
+    log.info("Cache de pricing invalidado")
+
+
+def _load_from_db() -> None:
+    """Cargar pricing config desde la DB. Si falla, usar defaults."""
+    global _cache_loaded_at, _cache_module_prices, _cache_period_mults, _cache_quantity_mults
+
+    # Defaults primero para garantizar valores si la DB falla parcialmente
+    module_prices = dict(_DEFAULT_MODULE_PRICES_USD)
+    period_mults = dict(_DEFAULT_PERIOD_MULTIPLIERS)
+    quantity_mults = dict(_DEFAULT_QUANTITY_MULTIPLIERS)
+
+    try:
+        from app.core.database import SessionLocal
+        from app.models.pricing_config import PricingConfig
+        db = SessionLocal()
+        try:
+            rows = db.query(PricingConfig).all()
+            for row in rows:
+                key = row.key
+                val = Decimal(str(row.value))
+                if key.startswith("module_price:"):
+                    module_id = key.split(":", 1)[1]
+                    if module_id in MODULE_DISPLAY_NAMES:
+                        module_prices[module_id] = val
+                elif key.startswith("period_multiplier:"):
+                    period = key.split(":", 1)[1]
+                    if period in PERIOD_MONTHS:
+                        period_mults[period] = val
+                elif key.startswith("quantity_multiplier:"):
+                    qty_str = key.split(":", 1)[1]
+                    try:
+                        qty = int(qty_str)
+                        quantity_mults[qty] = val
+                    except ValueError:
+                        log.warning(f"quantity_multiplier con qty invalido: {qty_str}")
+        finally:
+            db.close()
+    except Exception as e:
+        log.warning(f"No se pudo leer pricing_config de DB, usando defaults: {e}")
+
+    _cache_module_prices = module_prices
+    _cache_period_mults = period_mults
+    _cache_quantity_mults = quantity_mults
+    _cache_loaded_at = time.monotonic()
+
+
+def _ensure_cache() -> None:
+    """Garantiza que el cache este cargado y dentro del TTL."""
+    age = time.monotonic() - _cache_loaded_at
+    if _cache_loaded_at == 0.0 or age > _CACHE_TTL_SECONDS:
+        _load_from_db()
+
+
+def get_module_prices() -> Dict[str, Decimal]:
+    """Precios mensuales USD de cada modulo (desde DB con cache)."""
+    _ensure_cache()
+    return dict(_cache_module_prices)
+
+
+def get_period_multipliers() -> Dict[str, Decimal]:
+    """Multiplicadores de descuento por periodo (desde DB con cache)."""
+    _ensure_cache()
+    return dict(_cache_period_mults)
+
+
+def get_quantity_multipliers() -> Dict[int, Decimal]:
+    """Multiplicadores de descuento por cantidad de modulos (desde DB con cache)."""
+    _ensure_cache()
+    return dict(_cache_quantity_mults)
+
+
+# Aliases de compatibilidad con el codigo previo (lectura solo).
+# IMPORTANTE: estos NO se mutan en runtime - los modulos que los lean
+# llamaran a las funciones get_*() y obtendran valores vivos.
+MODULE_PRICES_USD = _DEFAULT_MODULE_PRICES_USD  # placeholder; usar get_module_prices()
+PERIOD_MULTIPLIERS = _DEFAULT_PERIOD_MULTIPLIERS  # placeholder; usar get_period_multipliers()
+QUANTITY_MULTIPLIERS = _DEFAULT_QUANTITY_MULTIPLIERS  # placeholder; usar get_quantity_multipliers()
 
 
 def _round_money(value: Decimal) -> Decimal:
@@ -116,11 +219,16 @@ def calculate_price(
     if not modules:
         raise ValueError("Debe seleccionar al menos 1 modulo")
 
+    # Leer precios y multiplicadores desde DB (con cache)
+    module_prices = get_module_prices()
+    period_mults = get_period_multipliers()
+    quantity_mults = get_quantity_multipliers()
+
     # Validar y deduplicar (manteniendo orden)
     seen = set()
     unique_modules = []
     for m in modules:
-        if m not in MODULE_PRICES_USD:
+        if m not in module_prices:
             raise ValueError(f"Modulo desconocido: {m}")
         if m not in seen:
             seen.add(m)
@@ -130,13 +238,13 @@ def calculate_price(
         raise ValueError(f"Periodo desconocido: {period}")
 
     months = PERIOD_MONTHS[period]
-    period_mult = PERIOD_MULTIPLIERS[period]
+    period_mult = period_mults.get(period, Decimal("1.00"))
 
     qty = len(unique_modules)
-    qty_mult = QUANTITY_MULTIPLIERS.get(qty, Decimal("1.00"))
+    qty_mult = quantity_mults.get(qty, Decimal("1.00"))
 
     # Precio base = suma de precios mensuales * meses
-    monthly_sum = sum((MODULE_PRICES_USD[m] for m in unique_modules), Decimal("0"))
+    monthly_sum = sum((module_prices[m] for m in unique_modules), Decimal("0"))
     base_total_usd = monthly_sum * Decimal(months)
 
     # Aplicar descuentos
@@ -161,7 +269,7 @@ def calculate_price(
             {
                 "id": m,
                 "name": MODULE_DISPLAY_NAMES[m],
-                "price_usd_monthly": _round_money(MODULE_PRICES_USD[m]),
+                "price_usd_monthly": _round_money(module_prices[m]),
             }
             for m in unique_modules
         ],
@@ -185,13 +293,14 @@ def get_module_catalog() -> List[Dict]:
 
     Para mostrar al cliente como catalogo antes de elegir.
     """
+    prices = get_module_prices()
     return [
         {
             "id": module_id,
             "name": MODULE_DISPLAY_NAMES[module_id],
-            "price_usd_monthly": _round_money(price),
+            "price_usd_monthly": _round_money(prices.get(module_id, Decimal("0"))),
         }
-        for module_id, price in MODULE_PRICES_USD.items()
+        for module_id in MODULE_DISPLAY_NAMES
     ]
 
 
@@ -200,11 +309,12 @@ def get_period_catalog() -> List[Dict]:
 
     Para mostrar al cliente como selector.
     """
+    mults = get_period_multipliers()
     return [
         {
             "id": period_id,
             "months": months,
-            "discount_pct": int((Decimal("1") - PERIOD_MULTIPLIERS[period_id]) * 100),
+            "discount_pct": int((Decimal("1") - mults.get(period_id, Decimal("1"))) * 100),
         }
         for period_id, months in PERIOD_MONTHS.items()
     ]

@@ -97,6 +97,79 @@ tr:hover td{background:#162032}
 <div class="form-row"><button id="btn-make-admin">Hacer Admin</button></div>
 <div id="makeadmin-msg"></div>
 </div>
+
+<!-- ============================================================ -->
+<!-- Suscripciones de modulos de gestion (#870 Fase 1)             -->
+<!-- ============================================================ -->
+
+<div class="card">
+<h2>Asignar suscripcion</h2>
+<div class="form-row"><label>Email:</label><input type="email" id="sub-email" placeholder="usuario@email.com"></div>
+<div class="form-row"><label>Modulo:</label>
+<select id="sub-module" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em;min-width:250px">
+<option value="service_enterprise">Empresa de Servicio (SE)</option>
+<option value="biomedical_engineering">Ingenieria Biomedica (IB)</option>
+<option value="proposal_generator">Generador de Propuestas (PG)</option>
+<option value="knowledge_base">Base de Conocimiento (KB)</option>
+</select></div>
+<div class="form-row"><label>Periodo:</label>
+<select id="sub-period" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em;min-width:250px">
+<option value="monthly">Mensual (30 dias)</option>
+<option value="quarterly">Trimestral (90 dias)</option>
+<option value="semester">Semestral (180 dias)</option>
+<option value="annual" selected>Anual (365 dias)</option>
+</select></div>
+<div class="form-row"><label>Meses custom:</label><input type="number" id="sub-months" min="1" max="60" placeholder="opcional"></div>
+<div class="form-row"><label>Notas:</label><input type="text" id="sub-notes" placeholder="Motivo / referencia (opcional)"></div>
+<div class="form-row"><button id="btn-grant-sub">Asignar Suscripcion</button></div>
+<div id="sub-msg"></div>
+</div>
+
+<div class="card">
+<h2>Lista de suscripciones</h2>
+<div class="form-row">
+<label>Filtrar email:</label><input type="email" id="filter-sub-email" placeholder="(todas)" style="min-width:180px">
+<label>Modulo:</label>
+<select id="filter-sub-module" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em">
+<option value="">(todos)</option>
+<option value="service_enterprise">SE</option>
+<option value="biomedical_engineering">IB</option>
+<option value="proposal_generator">PG</option>
+<option value="knowledge_base">KB</option>
+</select>
+<label>Status:</label>
+<select id="filter-sub-status" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em">
+<option value="">(todos)</option>
+<option value="active" selected>active</option>
+<option value="expired">expired</option>
+<option value="cancelled">cancelled</option>
+<option value="pending">pending</option>
+</select>
+<button class="secondary" id="btn-refresh-subs">Buscar</button>
+</div>
+<table><thead><tr><th>ID</th><th>Email</th><th>Modulo</th><th>Periodo</th><th>Status</th><th>Vence</th><th>Dias</th><th>Accion</th></tr></thead><tbody id="subs-table"></tbody></table>
+</div>
+
+<div class="card">
+<h2>Calcular precio de combo</h2>
+<div class="form-row">
+<label>Modulos:</label>
+<label style="min-width:auto"><input type="checkbox" class="price-mod" value="service_enterprise"> SE</label>
+<label style="min-width:auto"><input type="checkbox" class="price-mod" value="biomedical_engineering"> IB</label>
+<label style="min-width:auto"><input type="checkbox" class="price-mod" value="proposal_generator"> PG</label>
+<label style="min-width:auto"><input type="checkbox" class="price-mod" value="knowledge_base"> KB</label>
+</div>
+<div class="form-row"><label>Periodo:</label>
+<select id="price-period" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em;min-width:250px">
+<option value="monthly">Mensual</option>
+<option value="quarterly">Trimestral</option>
+<option value="semester">Semestral</option>
+<option value="annual" selected>Anual</option>
+</select></div>
+<div class="form-row"><button id="btn-calc-price">Calcular Precio</button></div>
+<div id="price-result" style="margin-top:10px"></div>
+</div>
+
 </div>
 </div>
 
@@ -225,6 +298,153 @@ tr:hover td{background:#162032}
       else { showMsg("makeadmin-msg", false, errMsg(r.data)); }
     });
   });
+
+  // ============================================================
+  // Suscripciones (#870 Fase 1)
+  // ============================================================
+
+  var MODULE_NAMES = {
+    "service_enterprise": "SE",
+    "biomedical_engineering": "IB",
+    "proposal_generator": "PG",
+    "knowledge_base": "KB"
+  };
+
+  function loadSubs(){
+    var email = val("filter-sub-email");
+    var moduleId = $("filter-sub-module").value;
+    var statusF = $("filter-sub-status").value;
+    var qs = [];
+    if (email) qs.push("email=" + encodeURIComponent(email));
+    if (moduleId) qs.push("module_id=" + encodeURIComponent(moduleId));
+    if (statusF) qs.push("status=" + encodeURIComponent(statusF));
+    var path = "/admin/list-subscriptions" + (qs.length ? "?" + qs.join("&") : "");
+    api("GET", path).then(function(r){
+      var tb = $("subs-table");
+      tb.innerHTML = "";
+      if (r.status === 200 && Array.isArray(r.data)){
+        if (r.data.length === 0){
+          tb.innerHTML = "<tr><td colspan=8 style='color:#64748b;text-align:center;padding:20px'>(sin suscripciones)</td></tr>";
+          return;
+        }
+        r.data.forEach(function(s){
+          var tr = document.createElement("tr");
+          var modShort = MODULE_NAMES[s.module_id] || s.module_id;
+          var vence = (s.expires_at || "").substring(0, 10);
+          var diasColor = s.days_left < 0 ? "#fca5a5" : (s.days_left < 30 ? "#fbbf24" : "#4ade80");
+          var statusBadge = s.status === "active"
+            ? "<span class=badge-admin>" + s.status + "</span>"
+            : "<span class=badge-user>" + s.status + "</span>";
+          tr.innerHTML =
+            "<td>" + s.id + "</td>" +
+            "<td>" + s.user_email + "</td>" +
+            "<td><strong>" + modShort + "</strong></td>" +
+            "<td>" + s.period + "</td>" +
+            "<td>" + statusBadge + "</td>" +
+            "<td>" + vence + "</td>" +
+            "<td style='color:" + diasColor + ";font-weight:600'>" + s.days_left + "</td>" +
+            "<td>";
+          if (s.status === "active"){
+            var btn = document.createElement("button");
+            btn.className = "danger";
+            btn.style.padding = "4px 10px";
+            btn.style.fontSize = ".8em";
+            btn.textContent = "Revocar";
+            btn.addEventListener("click", function(){
+              revokeSub(s.user_email, s.module_id);
+            });
+            tr.lastChild.appendChild(btn);
+          }
+          tb.appendChild(tr);
+        });
+      } else {
+        tb.innerHTML = "<tr><td colspan=8>" + errMsg(r.data) + "</td></tr>";
+      }
+    });
+  }
+
+  function revokeSub(email, moduleId){
+    var reason = prompt("Motivo de revocacion para " + email + " / " + moduleId + ":", "Revocada por admin");
+    if (reason === null) return;
+    api("POST", "/admin/revoke-subscription", {
+      email: email,
+      module_id: moduleId,
+      reason: reason || "Revocada por admin"
+    }).then(function(r){
+      if (r.status === 200){
+        alert("Suscripcion revocada");
+        loadSubs();
+      } else {
+        alert("Error: " + errMsg(r.data));
+      }
+    });
+  }
+
+  $("btn-grant-sub").addEventListener("click", function(){
+    var email = val("sub-email");
+    var moduleId = $("sub-module").value;
+    var period = $("sub-period").value;
+    var months = parseInt($("sub-months").value) || null;
+    var notes = val("sub-notes") || "Asignacion desde panel admin";
+    if (!email){ showMsg("sub-msg", false, "Email requerido"); return; }
+    var body = { email: email, module_id: moduleId, period: period, notes: notes };
+    if (months && months > 0) body.months = months;
+    api("POST", "/admin/grant-subscription", body).then(function(r){
+      if (r.status === 200){
+        var modShort = MODULE_NAMES[r.data.module_id] || r.data.module_id;
+        showMsg("sub-msg", true,
+          "OK: suscripcion #" + r.data.subscription_id + " a " + r.data.user_email +
+          " (" + modShort + " " + r.data.period + ") vence en " + r.data.days_left + " dias");
+        loadSubs();
+      } else {
+        showMsg("sub-msg", false, errMsg(r.data));
+      }
+    });
+  });
+
+  $("btn-refresh-subs").addEventListener("click", loadSubs);
+
+  $("btn-calc-price").addEventListener("click", function(){
+    var modules = [];
+    document.querySelectorAll(".price-mod:checked").forEach(function(cb){
+      modules.push(cb.value);
+    });
+    if (modules.length === 0){
+      $("price-result").innerHTML = "<div class='msg msg-err'>Seleccione al menos 1 modulo</div>";
+      return;
+    }
+    var period = $("price-period").value;
+    var path = "/subscriptions/pricing?modules=" + modules.join(",") + "&period=" + period;
+    api("GET", path).then(function(r){
+      if (r.status === 200){
+        var d = r.data;
+        var html = "<div class='msg msg-ok' style='line-height:1.6'>";
+        html += "<strong>" + d.modules.length + " modulo(s) por " + d.months + " meses</strong><br>";
+        d.modules.forEach(function(m){
+          html += "&nbsp;&nbsp;- " + m.name + ": $" + m.price_usd_monthly.toFixed(2) + " USD/mes<br>";
+        });
+        html += "Base sin descuentos: $" + d.base_total_usd.toFixed(2) + " USD<br>";
+        html += "Descuento periodo: " + d.period_discount_pct + "% | Descuento cantidad: " + d.quantity_discount_pct + "%<br>";
+        html += "<strong style='font-size:1.2em;color:#4ade80'>TOTAL: $" + d.total_usd.toFixed(2) + " USD</strong>";
+        if (d.total_ars > 0){
+          html += " &nbsp;|&nbsp; <strong>$" + d.total_ars.toLocaleString("es-AR") + " ARS</strong>";
+          html += " <span style='color:#64748b;font-size:.85em'>(cot. $" + d.usd_to_ars_rate + ")</span>";
+        }
+        html += "<br>Ahorro total: $" + d.savings_usd.toFixed(2) + " (" + d.savings_pct + "%)";
+        html += "</div>";
+        $("price-result").innerHTML = html;
+      } else {
+        $("price-result").innerHTML = "<div class='msg msg-err'>" + errMsg(r.data) + "</div>";
+      }
+    });
+  });
+
+  // Cargar suscripciones al loguear (se llama desde loadUsers via login)
+  var origLoadUsers = loadUsers;
+  loadUsers = function(){
+    origLoadUsers();
+    loadSubs();
+  };
 })();
 </script>
 </body>

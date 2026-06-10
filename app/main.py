@@ -9,7 +9,7 @@ import logging
 import traceback
 
 from app.core.config import settings
-from app.api.routes import auth, credits, reports, payments, admin, company, subscriptions, offers
+from app.api.routes import auth, credits, reports, payments, admin, company, subscriptions, offers, diagnostic_reports
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(company.router, prefix="/api")
 app.include_router(subscriptions.router, prefix="/api")
 app.include_router(offers.router, prefix="/api")
+app.include_router(diagnostic_reports.router, prefix="/api")
 
 
 @app.on_event("startup")

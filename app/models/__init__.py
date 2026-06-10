@@ -5,6 +5,7 @@ from app.models.login_attempt import LoginAttempt
 from app.models.company import Company
 from app.models.subscription import Subscription
 from app.models.pricing_config import PricingConfig
+from app.models.offer import Offer, OfferRedemption
 
 __all__ = ["User", "Report", "CreditTransaction", "LoginAttempt", "Company",
-           "Subscription", "PricingConfig"]
+           "Subscription", "PricingConfig", "Offer", "OfferRedemption"]

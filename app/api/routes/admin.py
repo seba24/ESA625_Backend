@@ -678,3 +678,226 @@ def list_all_subscriptions(
         }
         for s, u in rows
     ]
+
+
+# ----------------------------------------------------------------------
+# Ofertas relampago (#871 Fase 2)
+# ----------------------------------------------------------------------
+
+class CreateOfferRequest(BaseModel):
+    name: str
+    description: str = ""
+    code: Optional[str] = None
+    offer_type: str  # 'quantity_discount' | 'percent_off' | 'bonus' | 'bundle'
+    config: dict  # ver schema en offer_service.validate_offer_config
+    audience_type: str = "public"
+    audience_value: str = ""
+    starts_at: Optional[str] = None  # ISO 8601; default ahora
+    expires_at: str  # ISO 8601
+    max_redemptions: int = 0  # 0 = sin limite
+    max_per_user: int = 1
+    active: bool = True
+
+
+class UpdateOfferRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    expires_at: Optional[str] = None
+    max_redemptions: Optional[int] = None
+    max_per_user: Optional[int] = None
+    active: Optional[bool] = None
+    audience_type: Optional[str] = None
+    audience_value: Optional[str] = None
+
+
+@router.post("/offers")
+def admin_create_offer(
+    req: CreateOfferRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Crear una oferta nueva."""
+    import json as _json
+    from datetime import datetime as _dt
+    from app.models.offer import Offer, ALLOWED_AUDIENCE_TYPES
+    from app.services.offer_service import validate_offer_config
+
+    err = validate_offer_config(req.offer_type, req.config)
+    if err:
+        raise HTTPException(400, err)
+
+    if req.audience_type not in ALLOWED_AUDIENCE_TYPES:
+        raise HTTPException(
+            400, f"audience_type invalido. Validos: {sorted(ALLOWED_AUDIENCE_TYPES)}"
+        )
+
+    try:
+        expires_at = _dt.fromisoformat(req.expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(400, "expires_at debe ser ISO 8601")
+
+    starts_at = None
+    if req.starts_at:
+        try:
+            starts_at = _dt.fromisoformat(req.starts_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "starts_at debe ser ISO 8601")
+
+    if req.code:
+        existing = db.query(Offer).filter(Offer.code == req.code).first()
+        if existing:
+            raise HTTPException(409, f"Ya existe una oferta con code='{req.code}'")
+
+    offer = Offer(
+        code=req.code,
+        name=req.name,
+        description=req.description,
+        offer_type=req.offer_type,
+        config_json=_json.dumps(req.config),
+        audience_type=req.audience_type,
+        audience_value=req.audience_value,
+        expires_at=expires_at,
+        max_redemptions=req.max_redemptions,
+        max_per_user=req.max_per_user,
+        active=req.active,
+        created_by_admin_id=admin.id,
+    )
+    if starts_at:
+        offer.starts_at = starts_at
+
+    db.add(offer)
+    db.commit()
+    db.refresh(offer)
+
+    log.info(
+        f"Admin {admin.email} creo oferta #{offer.id} '{offer.name}' "
+        f"({offer.offer_type}, audience={offer.audience_type})"
+    )
+
+    from app.services.offer_service import offer_to_dict
+    return offer_to_dict(offer, include_admin_fields=True)
+
+
+@router.get("/offers")
+def admin_list_offers(
+    status_filter: Optional[str] = Query(None, alias="status",
+                                         description="all|active|expired"),
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Listar ofertas (incluye inactivas y expiradas)."""
+    from datetime import datetime as _dt
+    from app.models.offer import Offer
+    from app.services.offer_service import offer_to_dict
+
+    query = db.query(Offer)
+    now = _dt.now().astimezone()
+    if status_filter == "active":
+        query = query.filter(Offer.active.is_(True), Offer.expires_at > now)
+    elif status_filter == "expired":
+        query = query.filter(Offer.expires_at <= now)
+    elif status_filter == "inactive":
+        query = query.filter(Offer.active.is_(False))
+
+    offers = query.order_by(Offer.created_at.desc()).limit(500).all()
+    return [offer_to_dict(o, include_admin_fields=True) for o in offers]
+
+
+@router.put("/offers/{offer_id}")
+def admin_update_offer(
+    offer_id: int,
+    req: UpdateOfferRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Actualizar campos de una oferta existente."""
+    from datetime import datetime as _dt
+    from app.models.offer import Offer, ALLOWED_AUDIENCE_TYPES
+    from app.services.offer_service import offer_to_dict
+
+    offer = db.query(Offer).filter(Offer.id == offer_id).first()
+    if not offer:
+        raise HTTPException(404, "Oferta no encontrada")
+
+    if req.name is not None:
+        offer.name = req.name
+    if req.description is not None:
+        offer.description = req.description
+    if req.expires_at is not None:
+        try:
+            offer.expires_at = _dt.fromisoformat(req.expires_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "expires_at debe ser ISO 8601")
+    if req.max_redemptions is not None:
+        offer.max_redemptions = req.max_redemptions
+    if req.max_per_user is not None:
+        offer.max_per_user = req.max_per_user
+    if req.active is not None:
+        offer.active = req.active
+    if req.audience_type is not None:
+        if req.audience_type not in ALLOWED_AUDIENCE_TYPES:
+            raise HTTPException(
+                400, f"audience_type invalido. Validos: {sorted(ALLOWED_AUDIENCE_TYPES)}"
+            )
+        offer.audience_type = req.audience_type
+    if req.audience_value is not None:
+        offer.audience_value = req.audience_value
+
+    db.commit()
+    db.refresh(offer)
+    log.info(f"Admin {admin.email} actualizo oferta #{offer.id}")
+    return offer_to_dict(offer, include_admin_fields=True)
+
+
+@router.delete("/offers/{offer_id}")
+def admin_delete_offer(
+    offer_id: int,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Soft delete: marca active=False. No borra la fila para preservar canjes."""
+    from app.models.offer import Offer
+
+    offer = db.query(Offer).filter(Offer.id == offer_id).first()
+    if not offer:
+        raise HTTPException(404, "Oferta no encontrada")
+
+    offer.active = False
+    db.commit()
+    log.info(f"Admin {admin.email} desactivo oferta #{offer.id}")
+    return {"offer_id": offer.id, "active": False, "message": "Oferta desactivada"}
+
+
+@router.get("/offers/{offer_id}/redemptions")
+def admin_list_redemptions(
+    offer_id: int,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Listar canjes de una oferta especifica."""
+    from app.models.offer import Offer, OfferRedemption
+
+    offer = db.query(Offer).filter(Offer.id == offer_id).first()
+    if not offer:
+        raise HTTPException(404, "Oferta no encontrada")
+
+    rows = (
+        db.query(OfferRedemption, User)
+        .join(User, OfferRedemption.user_id == User.id)
+        .filter(OfferRedemption.offer_id == offer_id)
+        .order_by(OfferRedemption.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "user_email": u.email,
+            "credits_purchased": r.credits_purchased,
+            "credits_bonus": r.credits_bonus,
+            "amount_paid_ars": float(r.amount_paid_ars),
+            "status": r.status,
+            "mp_payment_id": r.mp_payment_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r, u in rows
+    ]

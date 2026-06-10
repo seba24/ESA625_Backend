@@ -14,7 +14,7 @@ Keys soportadas:
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import String, DateTime, Integer, Numeric, Text, ForeignKey
+from sqlalchemy import String, DateTime, Integer, Numeric, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,12 +25,13 @@ class PricingConfig(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
     )
     updated_by_admin_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True

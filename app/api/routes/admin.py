@@ -912,6 +912,57 @@ class SimulatePaymentRequest(BaseModel):
     fake_payment_id: Optional[str] = None  # default: 'TEST-<redemption_id>'
 
 
+class CreateRedemptionRequest(BaseModel):
+    offer_id: int
+    user_email: str
+    requested_credits: Optional[int] = None  # solo para percent_off
+
+
+@router.post("/create-redemption-for-user")
+def create_redemption_for_user(
+    req: CreateRedemptionRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Crea una redemption a nombre de un usuario - solo para testing.
+
+    Util para probar el flujo de canje sin necesidad de pago MP real:
+    1) admin crea el canje en pending
+    2) admin simula pago aprobado con simulate-payment-approved
+    3) verifica que el user recibio los creditos
+
+    NO valida audiencia ni vigencia - es testing.
+    """
+    from app.models.offer import Offer
+    from app.services.offer_service import register_redemption
+
+    user = db.query(User).filter(User.email == req.user_email).first()
+    if not user:
+        raise HTTPException(404, f"Usuario {req.user_email} no encontrado")
+
+    offer = db.query(Offer).filter(Offer.id == req.offer_id).first()
+    if not offer:
+        raise HTTPException(404, f"Oferta #{req.offer_id} no encontrada")
+
+    redemption = register_redemption(
+        db, offer, user, requested_credits=req.requested_credits,
+        mp_payment_id=None,
+    )
+    log.warning(
+        f"Admin {admin.email} creo redemption #{redemption.id} de testing "
+        f"para user {user.email} con oferta #{offer.id}"
+    )
+    return {
+        "redemption_id": redemption.id,
+        "user_email": user.email,
+        "offer_id": offer.id,
+        "offer_name": offer.name,
+        "status": redemption.status,
+        "credits_to_receive": redemption.credits_purchased + redemption.credits_bonus,
+        "message": f"Redemption #{redemption.id} creada en pending. Usa simulate-payment para aprobar.",
+    }
+
+
 @router.post("/simulate-payment-approved")
 def simulate_payment_approved(
     req: SimulatePaymentRequest,

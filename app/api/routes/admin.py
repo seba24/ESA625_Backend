@@ -552,116 +552,12 @@ def update_pricing_config(
 
 
 # ----------------------------------------------------------------------
-# Paquetes de creditos (#870 Fase 1 ext)
+# Paquetes de creditos (#871 Fase 1)
 # ----------------------------------------------------------------------
-
-class CreditPackageItem(BaseModel):
-    credits: int
-    price_ars: float
-    price_per_credit: float
-    description: str
-    active: bool
-    sort_order: int
-    updated_at: Optional[str] = None
-
-
-class UpsertCreditPackageRequest(BaseModel):
-    credits: int
-    price_ars: float
-    description: str = ""
-    active: bool = True
-    sort_order: int = 0
-
-
-@router.get("/credit-packages", response_model=List[CreditPackageItem])
-def admin_list_credit_packages(
-    admin: User = Depends(get_admin_user),
-    db: Session = Depends(get_db),
-):
-    """Lista TODOS los paquetes (incluyendo inactivos). Solo admin."""
-    from app.models.credit_package import CreditPackage
-
-    rows = (
-        db.query(CreditPackage)
-        .order_by(CreditPackage.sort_order, CreditPackage.credits)
-        .all()
-    )
-    return [
-        CreditPackageItem(
-            credits=r.credits,
-            price_ars=float(r.price_ars),
-            price_per_credit=round(float(r.price_ars) / r.credits, 2),
-            description=r.description,
-            active=r.active,
-            sort_order=r.sort_order,
-            updated_at=r.updated_at.isoformat() if r.updated_at else None,
-        )
-        for r in rows
-    ]
-
-
-@router.put("/credit-packages")
-def upsert_credit_package(
-    req: UpsertCreditPackageRequest,
-    admin: User = Depends(get_admin_user),
-    db: Session = Depends(get_db),
-):
-    """Crear o actualizar un paquete de creditos.
-
-    Si el paquete con esa cantidad de creditos ya existe, lo actualiza.
-    Si no, lo crea. Permite cambiar precio, descripcion, active, sort_order.
-    """
-    from app.models.credit_package import CreditPackage
-
-    if req.credits < 1:
-        raise HTTPException(400, "credits debe ser >= 1")
-    if req.price_ars < 0:
-        raise HTTPException(400, "price_ars debe ser >= 0")
-
-    row = db.query(CreditPackage).filter(CreditPackage.credits == req.credits).first()
-    is_new = row is None
-    if is_new:
-        row = CreditPackage(credits=req.credits)
-        db.add(row)
-
-    row.price_ars = req.price_ars
-    row.description = req.description or f"{req.credits} creditos"
-    row.active = req.active
-    row.sort_order = req.sort_order
-    row.updated_by_admin_id = admin.id
-    db.commit()
-
-    log.info(
-        f"Admin {admin.email} {'CREO' if is_new else 'ACTUALIZO'} paquete "
-        f"{req.credits} creditos = ${req.price_ars} ARS (active={req.active})"
-    )
-    return {
-        "credits": req.credits,
-        "price_ars": float(req.price_ars),
-        "price_per_credit": round(req.price_ars / req.credits, 2),
-        "active": req.active,
-        "message": "Paquete creado" if is_new else "Paquete actualizado",
-    }
-
-
-@router.delete("/credit-packages/{credits}")
-def delete_credit_package(
-    credits: int,
-    admin: User = Depends(get_admin_user),
-    db: Session = Depends(get_db),
-):
-    """Eliminar un paquete (no recomendado - mejor desactivar con active=False)."""
-    from app.models.credit_package import CreditPackage
-
-    row = db.query(CreditPackage).filter(CreditPackage.credits == credits).first()
-    if not row:
-        raise HTTPException(404, f"Paquete de {credits} creditos no existe")
-
-    db.delete(row)
-    db.commit()
-
-    log.info(f"Admin {admin.email} ELIMINO paquete de {credits} creditos")
-    return {"credits": credits, "message": "Paquete eliminado"}
+# Eliminados los endpoints CRUD de credit-packages. Los paquetes ahora se
+# CALCULAN AL VUELO desde pricing_config (credit_base_price_ars +
+# credit_qty_multiplier:<N>). El admin edita esos valores desde la seccion
+# 'Configuracion de precios' que ya existe.
 
 
 @router.get("/list-subscriptions")

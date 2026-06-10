@@ -19,46 +19,73 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
-# #870: paquetes editables desde panel admin via app/services/credits_pricing.py.
-# Los defaults aqui se usan SOLO si la DB no responde (fallback).
-_DEFAULT_CREDIT_PACKAGES = {
-    1: {"price": 10000, "description": "1 credito"},
-    5: {"price": 45000, "description": "5 creditos"},
-    10: {"price": 80000, "description": "10 creditos"},
-    25: {"price": 175000, "description": "25 creditos"},
-    50: {"price": 325000, "description": "50 creditos"},
-    100: {"price": 600000, "description": "100 creditos"},
+# #871 Fase 1: paquetes calculados al vuelo desde pricing_config.
+# El precio base ($/1 credito) y los multiplicadores por cantidad estan
+# en la tabla pricing_config, editables desde el panel admin.
+
+# Defaults (fallback si pricing_config no responde)
+_DEFAULT_BASE_PRICE_ARS = 10000.0
+_DEFAULT_QTY_MULTIPLIERS = {
+    1: 1.00,    # 0% off
+    5: 0.95,    # 5% off
+    10: 0.90,   # 10% off
+    25: 0.80,   # 20% off
+    50: 0.80,   # 20% off
+    100: 0.80,  # 20% off
 }
 
 
-def _get_active_packages(db: Session) -> dict:
-    """Devuelve {credits: {'price': float, 'description': str}} desde la DB.
+def _read_credit_pricing(db: Session) -> tuple[float, dict]:
+    """Lee precio base y multiplicadores de pricing_config.
 
-    Si la query falla (DB no disponible), retorna los defaults hardcoded.
-    Solo paquetes con active=True, ordenados por sort_order.
+    Returns (base_price_ars, {cantidad: multiplicador}).
+    Si la DB falla, usa defaults.
     """
     try:
-        from app.models.credit_package import CreditPackage
+        from app.models.pricing_config import PricingConfig
         rows = (
-            db.query(CreditPackage)
-            .filter(CreditPackage.active.is_(True))
-            .order_by(CreditPackage.sort_order, CreditPackage.credits)
+            db.query(PricingConfig)
+            .filter(PricingConfig.key.like("credit_%"))
             .all()
         )
-        if not rows:
-            return _DEFAULT_CREDIT_PACKAGES
-        return {
-            r.credits: {"price": float(r.price_ars), "description": r.description}
-            for r in rows
-        }
+        base_price = _DEFAULT_BASE_PRICE_ARS
+        multipliers = dict(_DEFAULT_QTY_MULTIPLIERS)
+        for r in rows:
+            if r.key == "credit_base_price_ars":
+                base_price = float(r.value)
+            elif r.key.startswith("credit_qty_multiplier:"):
+                try:
+                    qty = int(r.key.split(":", 1)[1])
+                    multipliers[qty] = float(r.value)
+                except (ValueError, IndexError):
+                    pass
+        return base_price, multipliers
     except Exception as e:
-        log.warning(f"No se pudo leer credit_packages de DB, usando defaults: {e}")
-        return _DEFAULT_CREDIT_PACKAGES
+        log.warning(f"No se pudo leer pricing_config de DB para creditos, usando defaults: {e}")
+        return _DEFAULT_BASE_PRICE_ARS, dict(_DEFAULT_QTY_MULTIPLIERS)
 
 
-# Compatibilidad con codigo viejo que importa CREDIT_PACKAGES (lectura defaults).
-# IMPORTANTE: usar _get_active_packages(db) en rutas, NO esta constante.
-CREDIT_PACKAGES = _DEFAULT_CREDIT_PACKAGES
+def _calculate_package_price(credits: int, base_price: float, multipliers: dict) -> float:
+    """Calcula precio total de un paquete: base * cantidad * multiplicador."""
+    mult = multipliers.get(credits, 1.0)  # 1.0 = sin descuento si la cantidad no esta en tabla
+    return round(base_price * credits * mult, 2)
+
+
+def _get_active_packages(db: Session) -> dict:
+    """Devuelve {credits: {'price': float, 'description': str}} calculado al vuelo.
+
+    Las cantidades vienen de las claves credit_qty_multiplier:N en pricing_config.
+    El precio se calcula como base_price * credits * multiplicador.
+    """
+    base_price, multipliers = _read_credit_pricing(db)
+    packages = {}
+    for credits, mult in sorted(multipliers.items()):
+        price = _calculate_package_price(credits, base_price, multipliers)
+        packages[credits] = {
+            "price": price,
+            "description": f"{credits} credito" + ("s" if credits != 1 else ""),
+        }
+    return packages
 
 
 class CreatePaymentRequest(BaseModel):

@@ -517,9 +517,7 @@ def update_pricing_config(
 ):
     """Actualiza UN valor de pricing_config y invalida el cache del servicio.
 
-    Solo permite editar claves que ya existen (no se pueden crear nuevas
-    desde el admin para evitar errores). Si querias agregar una clave nueva,
-    se hace via migracion SQL.
+    Solo permite editar claves que ya existen. Para crear nuevas use POST.
     """
     from app.models.pricing_config import PricingConfig
     from app.services.pricing import invalidate_cache as _invalidate_pricing_cache
@@ -529,7 +527,7 @@ def update_pricing_config(
 
     row = db.query(PricingConfig).filter(PricingConfig.key == req.key).first()
     if not row:
-        raise HTTPException(404, f"Clave de pricing no existe: {req.key}. Use migracion SQL para agregarla.")
+        raise HTTPException(404, f"Clave de pricing no existe: {req.key}. Use POST para crearla.")
 
     old_value = float(row.value)
     row.value = req.value
@@ -549,6 +547,85 @@ def update_pricing_config(
         "new_value": req.value,
         "message": "Precio actualizado, cache invalidado",
     }
+
+
+class CreatePricingRequest(BaseModel):
+    key: str
+    value: float
+    description: str = ""
+
+
+@router.post("/pricing-config")
+def create_pricing_config(
+    req: CreatePricingRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Crea una clave nueva en pricing_config.
+
+    Util para agregar paquetes de creditos nuevos desde la UI sin tocar SQL.
+    Si la clave ya existe, devuelve 409.
+    """
+    from app.models.pricing_config import PricingConfig
+    from app.services.pricing import invalidate_cache as _invalidate_pricing_cache
+
+    if req.value < 0:
+        raise HTTPException(400, "El valor debe ser >= 0")
+
+    existing = db.query(PricingConfig).filter(PricingConfig.key == req.key).first()
+    if existing:
+        raise HTTPException(409, f"La clave {req.key} ya existe. Use PUT para editar.")
+
+    row = PricingConfig(
+        key=req.key,
+        value=req.value,
+        description=req.description or "",
+        updated_by_admin_id=admin.id,
+    )
+    db.add(row)
+    db.commit()
+    _invalidate_pricing_cache()
+
+    log.info(f"Admin {admin.email} creo pricing {req.key} = {req.value}")
+    return {
+        "key": req.key,
+        "value": req.value,
+        "message": "Clave creada, cache invalidado",
+    }
+
+
+@router.delete("/pricing-config/{key:path}")
+def delete_pricing_config(
+    key: str,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Elimina una clave de pricing_config.
+
+    Util para borrar paquetes de creditos desde la UI. NO permite borrar
+    claves crititcas (precios de modulos, multiplicadores de periodo).
+    Solo claves de cantidad de creditos.
+    """
+    from app.models.pricing_config import PricingConfig
+    from app.services.pricing import invalidate_cache as _invalidate_pricing_cache
+
+    # Por seguridad solo permitimos borrar credit_qty_multiplier:N
+    if not key.startswith("credit_qty_multiplier:"):
+        raise HTTPException(
+            400,
+            "Solo se pueden borrar claves credit_qty_multiplier:N. Para otras, edite con PUT."
+        )
+
+    row = db.query(PricingConfig).filter(PricingConfig.key == key).first()
+    if not row:
+        raise HTTPException(404, f"Clave no existe: {key}")
+
+    db.delete(row)
+    db.commit()
+    _invalidate_pricing_cache()
+
+    log.info(f"Admin {admin.email} elimino pricing {key}")
+    return {"key": key, "message": "Clave eliminada, cache invalidado"}
 
 
 # ----------------------------------------------------------------------

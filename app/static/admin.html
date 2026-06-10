@@ -190,10 +190,34 @@ tr:hover td{background:#162032}
 <div id="pricing-msg"></div>
 </div>
 
-<!-- #871 Fase 1: la seccion 'Paquetes de creditos' fue eliminada.       -->
-<!-- Los precios de creditos ahora se editan desde 'Configuracion de    -->
-<!-- precios' usando las claves credit_base_price_ars (precio base de   -->
-<!-- 1 credito) y credit_qty_multiplier:N (descuento por cantidad).     -->
+<!-- ============================================================ -->
+<!-- Precios de creditos (#871 Fase 1) - UI simple                 -->
+<!-- ============================================================ -->
+
+<div class="card">
+<h2>Precios de creditos</h2>
+<p style="color:#64748b;font-size:.85em;margin-bottom:14px">Definir el precio de 1 credito y los descuentos por volumen. Los paquetes que ve el cliente en MercadoPago se calculan automaticamente.</p>
+
+<div class="form-row" style="margin-bottom:18px;align-items:center;gap:12px">
+<label style="font-weight:600;color:#e2e8f0">Precio de 1 credito (ARS):</label>
+<input type="number" id="credit-base-price" step="0.01" min="0" style="width:140px;text-align:right;background:#0f172a;border:1px solid #334155;color:#fbbf24;padding:8px 12px;border-radius:4px;font-size:1.1em;font-weight:600">
+<button id="btn-save-base-price">Guardar</button>
+<span id="credit-base-msg" style="margin-left:10px;color:#64748b;font-size:.85em"></span>
+</div>
+
+<h3 style="color:#94a3b8;margin:14px 0 8px;font-size:1em">Descuentos por cantidad</h3>
+<table><thead><tr>
+<th>Cantidad</th><th>% off</th><th>Precio total</th><th>$/credito</th><th>Activo</th><th>Accion</th>
+</tr></thead><tbody id="credit-tiers-table"></tbody></table>
+
+<h3 style="color:#94a3b8;margin:18px 0 8px;font-size:1em">Agregar fila</h3>
+<div class="form-row">
+<label>Cantidad:</label><input type="number" id="new-tier-qty" min="1" placeholder="200" style="width:100px">
+<label style="min-width:auto;margin-left:14px">% off:</label><input type="number" id="new-tier-discount" min="0" max="99" step="0.1" placeholder="25" style="width:100px">
+<button id="btn-add-tier" style="margin-left:10px">Agregar</button>
+</div>
+<div id="credit-tiers-msg"></div>
+</div>
 
 </div>
 </div>
@@ -521,15 +545,187 @@ tr:hover td{background:#162032}
 
   $("btn-load-pricing").addEventListener("click", loadPricing);
 
-  // #871 Fase 1: codigo de "Paquetes de creditos" eliminado.
-  // Los precios ahora se editan desde 'Configuracion de precios' (credit_*).
+  // ============================================================
+  // Precios de creditos (#871 Fase 1) - UI simple sobre pricing_config
+  // ============================================================
+  //
+  // Esta UI traduce las claves tecnicas de pricing_config en algo simple:
+  // - credit_base_price_ars        -> input arriba "Precio de 1 credito"
+  // - credit_qty_multiplier:N=0.95 -> fila tabla: cantidad=N, % off=5
+  //
+  // El % off se calcula como (1 - multiplicador) * 100.
+  // El multiplicador se calcula como 1 - (% off / 100).
 
-  // Cargar suscripciones y pricing al loguear
+  var creditBasePrice = 10000;  // se sobreescribe al cargar
+  var creditTiers = [];          // [{qty, multiplier}]
+
+  function _formatARS(value){
+    return "$" + Number(value).toLocaleString("es-AR", {maximumFractionDigits: 2});
+  }
+
+  function loadCreditPricing(){
+    // Lee TODAS las claves credit_* de pricing_config
+    api("GET", "/admin/pricing-config").then(function(r){
+      if (r.status !== 200 || !Array.isArray(r.data)){
+        $("credit-tiers-table").innerHTML = "<tr><td colspan=6 style='color:#fca5a5'>" + errMsg(r.data) + "</td></tr>";
+        return;
+      }
+      creditTiers = [];
+      r.data.forEach(function(item){
+        if (item.key === "credit_base_price_ars"){
+          creditBasePrice = parseFloat(item.value);
+          $("credit-base-price").value = item.value;
+        } else if (item.key.indexOf("credit_qty_multiplier:") === 0){
+          var qty = parseInt(item.key.split(":")[1]);
+          if (!isNaN(qty)){
+            creditTiers.push({qty: qty, multiplier: parseFloat(item.value)});
+          }
+        }
+      });
+      creditTiers.sort(function(a, b){ return a.qty - b.qty; });
+      renderCreditTiers();
+    });
+  }
+
+  function renderCreditTiers(){
+    var tb = $("credit-tiers-table");
+    tb.innerHTML = "";
+    if (creditTiers.length === 0){
+      tb.innerHTML = "<tr><td colspan=6 style='color:#fbbf24;text-align:center;padding:14px'>Sin descuentos cargados. Agregue una fila abajo o aplique migration 006.</td></tr>";
+      return;
+    }
+    creditTiers.forEach(function(tier){
+      var pctOff = ((1 - tier.multiplier) * 100).toFixed(1).replace(/\.0$/, "");
+      var total = creditBasePrice * tier.qty * tier.multiplier;
+      var perCred = creditBasePrice * tier.multiplier;
+      var tr = document.createElement("tr");
+      tr.className = "pricing-row";
+      tr.innerHTML =
+        "<td><strong>" + tier.qty + "</strong></td>" +
+        "<td><input type='number' step='0.1' min='0' max='99' class='tier-pct' value='" + pctOff + "' style='width:80px;text-align:right;background:#0f172a;border:1px solid #334155;color:#fbbf24;padding:6px 8px;border-radius:4px;font-weight:600'> %</td>" +
+        "<td><strong style='color:#4ade80'>" + _formatARS(total) + "</strong></td>" +
+        "<td style='color:#94a3b8;font-size:.9em'>" + _formatARS(perCred) + "</td>" +
+        "<td style='color:#4ade80'>Si</td>" +
+        "<td></td>";
+
+      var actionTd = tr.lastChild;
+      var saveBtn = document.createElement("button");
+      saveBtn.className = "save-btn";
+      saveBtn.textContent = "Guardar";
+      saveBtn.style.marginRight = "4px";
+      saveBtn.addEventListener("click", function(){
+        var pctInput = tr.querySelector(".tier-pct");
+        var pct = parseFloat(pctInput.value);
+        if (isNaN(pct) || pct < 0 || pct >= 100){
+          showMsg("credit-tiers-msg", false, "% off invalido");
+          return;
+        }
+        var newMult = 1 - (pct / 100);
+        saveTier(tier.qty, newMult);
+      });
+      actionTd.appendChild(saveBtn);
+
+      var delBtn = document.createElement("button");
+      delBtn.className = "danger";
+      delBtn.style.padding = "4px 10px";
+      delBtn.style.fontSize = ".8em";
+      delBtn.textContent = "Borrar";
+      delBtn.addEventListener("click", function(){
+        if (!confirm("Eliminar el paquete de " + tier.qty + " creditos?")) return;
+        deleteTier(tier.qty);
+      });
+      actionTd.appendChild(delBtn);
+
+      tb.appendChild(tr);
+    });
+  }
+
+  function saveTier(qty, multiplier){
+    var key = "credit_qty_multiplier:" + qty;
+    api("PUT", "/admin/pricing-config", { key: key, value: multiplier }).then(function(r){
+      if (r.status === 200){
+        showMsg("credit-tiers-msg", true,
+          qty + " creditos: " + ((1-r.data.new_value)*100).toFixed(1) + "% off");
+        loadCreditPricing();
+      } else if (r.status === 404){
+        // Clave nueva: crearla (el endpoint actual no la crea, hay que extender)
+        showMsg("credit-tiers-msg", false,
+          "Clave nueva (" + qty + " creditos). Aplicar primero como nueva via SQL o usar Agregar fila.");
+      } else {
+        showMsg("credit-tiers-msg", false, errMsg(r.data));
+      }
+    });
+  }
+
+  function deleteTier(qty){
+    var key = "credit_qty_multiplier:" + qty;
+    api("DELETE", "/admin/pricing-config/" + encodeURIComponent(key)).then(function(r){
+      if (r.status === 200){
+        showMsg("credit-tiers-msg", true, "Paquete de " + qty + " creditos eliminado");
+        loadCreditPricing();
+      } else {
+        showMsg("credit-tiers-msg", false, errMsg(r.data));
+      }
+    });
+  }
+
+  function addTier(qty, multiplier){
+    var key = "credit_qty_multiplier:" + qty;
+    api("POST", "/admin/pricing-config", {
+      key: key, value: multiplier,
+      description: "Multiplicador para paquete " + qty + " creditos"
+    }).then(function(r){
+      if (r.status === 200){
+        showMsg("credit-tiers-msg", true, "Paquete " + qty + " creditos agregado");
+        loadCreditPricing();
+        $("new-tier-qty").value = "";
+        $("new-tier-discount").value = "";
+      } else {
+        showMsg("credit-tiers-msg", false, errMsg(r.data));
+      }
+    });
+  }
+
+  $("btn-save-base-price").addEventListener("click", function(){
+    var val = parseFloat($("credit-base-price").value);
+    if (isNaN(val) || val < 0){
+      showMsg("credit-base-msg", false, "Precio invalido");
+      return;
+    }
+    api("PUT", "/admin/pricing-config", {
+      key: "credit_base_price_ars", value: val
+    }).then(function(r){
+      if (r.status === 200){
+        showMsg("credit-base-msg", true, "Guardado: " + _formatARS(val));
+        loadCreditPricing();
+      } else {
+        showMsg("credit-base-msg", false, errMsg(r.data));
+      }
+    });
+  });
+
+  $("btn-add-tier").addEventListener("click", function(){
+    var qty = parseInt($("new-tier-qty").value);
+    var pct = parseFloat($("new-tier-discount").value);
+    if (isNaN(qty) || qty < 1){
+      showMsg("credit-tiers-msg", false, "Cantidad invalida");
+      return;
+    }
+    if (isNaN(pct) || pct < 0 || pct >= 100){
+      showMsg("credit-tiers-msg", false, "% off invalido");
+      return;
+    }
+    var mult = 1 - (pct / 100);
+    addTier(qty, mult);
+  });
+
+  // Cargar suscripciones, pricing y precios de creditos al loguear
   var origLoadUsers = loadUsers;
   loadUsers = function(){
     origLoadUsers();
     loadSubs();
     loadPricing();
+    loadCreditPricing();
   };
 })();
 </script>

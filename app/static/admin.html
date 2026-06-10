@@ -221,6 +221,92 @@ tr:hover td{background:#162032}
 <div id="credit-tiers-msg"></div>
 </div>
 
+<!-- ============================================================ -->
+<!-- Ofertas relampago (#871 Fase 2.1)                              -->
+<!-- ============================================================ -->
+
+<div class="card">
+<h2>Ofertas relampago</h2>
+<p style="color:#64748b;font-size:.85em;margin-bottom:14px">Crear promos de creditos con vigencia limitada. Audiencia: todos / email especifico / lista CSV / por rol.</p>
+
+<h3 style="color:#94a3b8;margin:14px 0 8px;font-size:1em">Crear nueva oferta</h3>
+
+<div class="form-row">
+<label>Tipo:</label>
+<select id="offer-type" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em;min-width:200px">
+<option value="quantity_discount">Cantidad fija con precio especial</option>
+<option value="bonus">Bonus (compra X recibi Y extra)</option>
+<option value="percent_off">% off sobre precio normal</option>
+<option value="bundle">Bundle (creditos + suscripcion gratis)</option>
+</select>
+</div>
+<div class="form-row"><label>Nombre:</label><input type="text" id="offer-name" placeholder="Ej: Promo Invierno" style="min-width:300px"></div>
+
+<div id="fields-quantity-discount" class="offer-type-fields">
+<div class="form-row"><label>Creditos:</label><input type="number" id="qd-credits" min="1" placeholder="10" style="width:120px"></div>
+<div class="form-row"><label>Precio ARS:</label><input type="number" id="qd-price" min="0" step="0.01" placeholder="70000" style="width:160px"></div>
+</div>
+
+<div id="fields-bonus" class="offer-type-fields" style="display:none">
+<div class="form-row"><label>Compra (creditos):</label><input type="number" id="b-buy" min="1" placeholder="10" style="width:120px"></div>
+<div class="form-row"><label>Recibi extra:</label><input type="number" id="b-extra" min="1" placeholder="2" style="width:120px"></div>
+</div>
+
+<div id="fields-percent-off" class="offer-type-fields" style="display:none">
+<div class="form-row"><label>% descuento:</label><input type="number" id="po-pct" min="0.1" max="99" step="0.1" placeholder="30" style="width:100px"></div>
+<div class="form-row"><label>Min creditos:</label><input type="number" id="po-min" min="0" placeholder="5" style="width:120px"></div>
+<div class="form-row"><label>Max creditos:</label><input type="number" id="po-max" min="0" placeholder="50 (0 = sin limite)" style="width:160px"></div>
+</div>
+
+<div id="fields-bundle" class="offer-type-fields" style="display:none">
+<div class="form-row"><label>Creditos:</label><input type="number" id="bu-credits" min="1" placeholder="50" style="width:120px"></div>
+<div class="form-row"><label>Precio ARS:</label><input type="number" id="bu-price" min="0" step="0.01" placeholder="400000" style="width:160px"></div>
+<div class="form-row"><label>Modulos gratis:</label>
+<select id="bu-modules" multiple size="4" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em;min-width:300px">
+<option value="service_enterprise">Empresa de Servicio (SE)</option>
+<option value="biomedical_engineering">Ingenieria Biomedica (IB)</option>
+<option value="proposal_generator">Generador de Propuestas (PG)</option>
+<option value="knowledge_base">Base de Conocimiento (KB)</option>
+</select></div>
+<div class="form-row"><label>Meses gratis:</label><input type="number" id="bu-months" min="1" placeholder="1" style="width:100px"></div>
+</div>
+
+<h3 style="color:#94a3b8;margin:18px 0 8px;font-size:1em">Audiencia y vigencia</h3>
+
+<div class="form-row"><label>Audiencia:</label>
+<select id="offer-audience-type" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em;min-width:200px">
+<option value="public">Todos (publica)</option>
+<option value="user_email">Un usuario por email</option>
+<option value="user_list">Lista de emails (CSV)</option>
+<option value="role">Por rol</option>
+</select>
+<input type="text" id="offer-audience-value" placeholder="" style="margin-left:10px;min-width:300px;display:none">
+</div>
+
+<div class="form-row"><label>Expira:</label><input type="date" id="offer-expires" style="width:200px"></div>
+<div class="form-row"><label>Max canjes total:</label><input type="number" id="offer-max-redemptions" min="0" value="0" style="width:100px"> <span style="color:#64748b;font-size:.85em;margin-left:8px">(0 = sin limite)</span></div>
+<div class="form-row"><label>Max canjes por usuario:</label><input type="number" id="offer-max-per-user" min="1" value="1" style="width:100px"></div>
+
+<div class="form-row"><button id="btn-create-offer">Crear Oferta</button></div>
+<div id="offer-create-msg"></div>
+
+<h3 style="color:#94a3b8;margin:20px 0 8px;font-size:1em">Ofertas existentes</h3>
+<div class="form-row">
+<label>Filtrar:</label>
+<select id="filter-offers-status" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:4px;font-size:.9em">
+<option value="">Todas</option>
+<option value="active" selected>Activas</option>
+<option value="expired">Expiradas</option>
+<option value="inactive">Inactivas</option>
+</select>
+<button class="secondary" id="btn-load-offers" style="margin-left:10px">Recargar</button>
+</div>
+<table><thead><tr>
+<th>ID</th><th>Tipo</th><th>Nombre</th><th>Audiencia</th><th>Expira</th><th>Cupos</th><th>Activa</th><th>Accion</th>
+</tr></thead><tbody id="offers-table"></tbody></table>
+<div id="offer-msg"></div>
+</div>
+
 </div>
 </div>
 
@@ -786,13 +872,227 @@ tr:hover td{background:#162032}
     addTier(qty, mult);
   });
 
-  // Cargar suscripciones, pricing y precios de creditos al loguear
+  // ============================================================
+  // Ofertas relampago (#871 Fase 2.1)
+  // ============================================================
+
+  var OFFER_TYPE_NAMES = {
+    "quantity_discount": "Cantidad fija",
+    "bonus": "Bonus",
+    "percent_off": "% off",
+    "bundle": "Bundle"
+  };
+
+  function _toggleAudienceValue(){
+    var type = $("offer-audience-type").value;
+    var input = $("offer-audience-value");
+    if (type === "public"){
+      input.style.display = "none";
+      input.value = "";
+    } else {
+      input.style.display = "inline-block";
+      if (type === "user_email") input.placeholder = "usuario@email.com";
+      else if (type === "user_list") input.placeholder = "a@x.com,b@y.com,c@z.com";
+      else if (type === "role") input.placeholder = "admin | user";
+    }
+  }
+
+  function _toggleOfferTypeFields(){
+    var type = $("offer-type").value;
+    document.querySelectorAll(".offer-type-fields").forEach(function(el){
+      el.style.display = "none";
+    });
+    var visible = document.getElementById("fields-" + type.replace(/_/g, "-"));
+    if (visible) visible.style.display = "block";
+  }
+
+  $("offer-audience-type").addEventListener("change", _toggleAudienceValue);
+  $("offer-type").addEventListener("change", _toggleOfferTypeFields);
+
+  function _buildOfferConfig(){
+    var type = $("offer-type").value;
+    if (type === "quantity_discount"){
+      return {
+        credits: parseInt($("qd-credits").value) || 0,
+        price_ars: parseFloat($("qd-price").value) || 0
+      };
+    }
+    if (type === "bonus"){
+      return {
+        buy_credits: parseInt($("b-buy").value) || 0,
+        get_extra_credits: parseInt($("b-extra").value) || 0
+      };
+    }
+    if (type === "percent_off"){
+      return {
+        discount_pct: parseFloat($("po-pct").value) || 0,
+        min_credits: parseInt($("po-min").value) || 0,
+        max_credits: parseInt($("po-max").value) || 0
+      };
+    }
+    if (type === "bundle"){
+      var modSel = $("bu-modules");
+      var modules = [];
+      for (var i = 0; i < modSel.options.length; i++){
+        if (modSel.options[i].selected) modules.push(modSel.options[i].value);
+      }
+      return {
+        credits: parseInt($("bu-credits").value) || 0,
+        price_ars: parseFloat($("bu-price").value) || 0,
+        free_modules: modules,
+        free_months: parseInt($("bu-months").value) || 0
+      };
+    }
+    return {};
+  }
+
+  $("btn-create-offer").addEventListener("click", function(){
+    var name = val("offer-name");
+    var type = $("offer-type").value;
+    var expires = val("offer-expires");
+    var audienceType = $("offer-audience-type").value;
+    var audienceValue = val("offer-audience-value");
+    var maxRedemptions = parseInt($("offer-max-redemptions").value) || 0;
+    var maxPerUser = parseInt($("offer-max-per-user").value) || 1;
+
+    if (!name){ showMsg("offer-create-msg", false, "El nombre es obligatorio"); return; }
+    if (!expires){ showMsg("offer-create-msg", false, "La fecha de expiracion es obligatoria"); return; }
+    if (audienceType !== "public" && !audienceValue){
+      showMsg("offer-create-msg", false, "Falta el valor de audiencia");
+      return;
+    }
+
+    var config = _buildOfferConfig();
+
+    var body = {
+      name: name,
+      offer_type: type,
+      config: config,
+      audience_type: audienceType,
+      audience_value: audienceValue,
+      expires_at: expires + "T23:59:59+00:00",
+      max_redemptions: maxRedemptions,
+      max_per_user: maxPerUser,
+      active: true
+    };
+
+    api("POST", "/admin/offers", body).then(function(r){
+      if (r.status === 200){
+        showMsg("offer-create-msg", true, "Oferta #" + r.data.id + " creada: " + r.data.name);
+        // Limpiar form
+        $("offer-name").value = "";
+        $("offer-expires").value = "";
+        $("offer-audience-value").value = "";
+        document.querySelectorAll(".offer-type-fields input").forEach(function(i){ i.value = ""; });
+        loadOffers();
+      } else {
+        showMsg("offer-create-msg", false, errMsg(r.data));
+      }
+    });
+  });
+
+  function loadOffers(){
+    var statusFilter = $("filter-offers-status").value;
+    var path = "/admin/offers" + (statusFilter ? "?status=" + statusFilter : "");
+    api("GET", path).then(function(r){
+      var tb = $("offers-table");
+      tb.innerHTML = "";
+      if (r.status !== 200 || !Array.isArray(r.data)){
+        tb.innerHTML = "<tr><td colspan=8>" + errMsg(r.data) + "</td></tr>";
+        return;
+      }
+      if (r.data.length === 0){
+        tb.innerHTML = "<tr><td colspan=8 style='color:#64748b;text-align:center;padding:14px'>(sin ofertas)</td></tr>";
+        return;
+      }
+      r.data.forEach(function(o){
+        var tr = document.createElement("tr");
+        var aud = o.audience_type;
+        if (o.audience_value) aud += ":" + o.audience_value.substring(0, 25);
+        var expira = (o.expires_at || "").substring(0, 10);
+        var cupos = o.current_redemptions + "/" + (o.max_redemptions || "inf");
+        var act = o.active
+          ? "<span class=badge-admin>Si</span>"
+          : "<span class=badge-user>No</span>";
+
+        tr.innerHTML =
+          "<td><strong>" + o.id + "</strong></td>" +
+          "<td>" + (OFFER_TYPE_NAMES[o.offer_type] || o.offer_type) + "</td>" +
+          "<td>" + o.name + "</td>" +
+          "<td style='font-size:.85em'>" + aud + "</td>" +
+          "<td>" + expira + "</td>" +
+          "<td>" + cupos + "</td>" +
+          "<td>" + act + "</td>" +
+          "<td></td>";
+
+        var actionTd = tr.lastChild;
+
+        var viewBtn = document.createElement("button");
+        viewBtn.className = "secondary";
+        viewBtn.style.padding = "4px 10px";
+        viewBtn.style.fontSize = ".8em";
+        viewBtn.style.marginRight = "4px";
+        viewBtn.textContent = "Canjes";
+        viewBtn.addEventListener("click", function(){ showRedemptions(o.id, o.name); });
+        actionTd.appendChild(viewBtn);
+
+        if (o.active){
+          var disableBtn = document.createElement("button");
+          disableBtn.className = "danger";
+          disableBtn.style.padding = "4px 10px";
+          disableBtn.style.fontSize = ".8em";
+          disableBtn.textContent = "Desactivar";
+          disableBtn.addEventListener("click", function(){
+            if (!confirm("Desactivar oferta #" + o.id + " (" + o.name + ")?")) return;
+            api("DELETE", "/admin/offers/" + o.id).then(function(r2){
+              if (r2.status === 200){
+                showMsg("offer-msg", true, "Oferta desactivada");
+                loadOffers();
+              } else {
+                showMsg("offer-msg", false, errMsg(r2.data));
+              }
+            });
+          });
+          actionTd.appendChild(disableBtn);
+        }
+        tb.appendChild(tr);
+      });
+    });
+  }
+
+  function showRedemptions(offerId, offerName){
+    api("GET", "/admin/offers/" + offerId + "/redemptions").then(function(r){
+      if (r.status !== 200){
+        alert("Error: " + errMsg(r.data));
+        return;
+      }
+      if (r.data.length === 0){
+        alert("Oferta '" + offerName + "': sin canjes todavia");
+        return;
+      }
+      var lines = ["Canjes de oferta '" + offerName + "':", ""];
+      r.data.forEach(function(rd){
+        var fecha = (rd.created_at || "").substring(0, 19).replace("T", " ");
+        lines.push("#" + rd.id + " | " + rd.user_email + " | " +
+                   rd.credits_purchased + " cred" +
+                   (rd.credits_bonus ? " + " + rd.credits_bonus + " bonus" : "") +
+                   " | $" + Number(rd.amount_paid_ars).toLocaleString("es-AR") +
+                   " | " + rd.status + " | " + fecha);
+      });
+      alert(lines.join("\n"));
+    });
+  }
+
+  $("btn-load-offers").addEventListener("click", loadOffers);
+
+  // Cargar suscripciones, pricing, creditos y ofertas al loguear
   var origLoadUsers = loadUsers;
   loadUsers = function(){
     origLoadUsers();
     loadSubs();
     loadPricing();
     loadCreditPricing();
+    loadOffers();
   };
 })();
 </script>

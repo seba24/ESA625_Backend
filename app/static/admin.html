@@ -57,9 +57,11 @@ tr:hover td{background:#162032}
 
 <div id="login-section" class="card">
 <h2>Iniciar sesion admin</h2>
-<div class="form-row"><label>Email:</label><input type="email" id="login-email" value="admin@srcertificaciones.com"></div>
-<div class="form-row"><label>Password:</label><input type="password" id="login-password" placeholder="Password admin"></div>
-<div class="form-row"><button id="btn-login">Iniciar Sesion</button></div>
+<form autocomplete="off">
+<div class="form-row"><label>Email:</label><input type="email" id="login-email" value="admin@srcertificaciones.com" autocomplete="off"></div>
+<div class="form-row"><label>Password:</label><input type="password" id="login-password" placeholder="Password admin" autocomplete="new-password"></div>
+<div class="form-row"><button type="button" id="btn-login">Iniciar Sesion</button></div>
+</form>
 <div id="login-msg"></div>
 </div>
 
@@ -98,7 +100,7 @@ tr:hover td{background:#162032}
 <div class="card">
 <h2>Resetear contrasena</h2>
 <div class="form-row"><label>Email:</label><input type="email" id="pw-email" placeholder="usuario@email.com"></div>
-<div class="form-row"><label>Nueva pass:</label><input type="password" id="pw-new" placeholder="minimo 4 caracteres"></div>
+<div class="form-row"><label>Nueva pass:</label><input type="password" id="pw-new" placeholder="minimo 4 caracteres" autocomplete="new-password"></div>
 <div class="form-row"><button class="danger" id="btn-reset-pw">Resetear Contrasena</button></div>
 <div id="pw-msg"></div>
 </div>

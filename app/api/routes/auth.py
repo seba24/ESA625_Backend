@@ -96,7 +96,16 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         user.machine_id = req.machine_id
         db.commit()
 
-    token = create_access_token({"sub": str(user.id), "email": user.email})
+    # #871: para admins el token vence en 15 min (defensa contra robo de
+    # sesion + browser autocompletando password). Para usuarios normales
+    # mantenemos 24h porque hacen muchas operaciones largas (generar
+    # reportes, etc) y reloguearse cada 15 min seria insoportable.
+    from datetime import timedelta
+    token_lifetime = timedelta(minutes=15) if user.is_admin else None
+    token = create_access_token(
+        {"sub": str(user.id), "email": user.email},
+        expires_delta=token_lifetime,
+    )
     return TokenResponse(
         access_token=token,
         user_id=user.id,

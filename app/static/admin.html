@@ -229,6 +229,65 @@ tr:hover td{background:#162032}
   var API = window.location.origin + "/api";
   var TOKEN = "";
 
+  // ============================================================
+  // Seguridad: limpieza de password + auto-logout por inactividad
+  // ============================================================
+  //
+  // 1. Al cerrar/recargar la pagina: blanqueamos el campo password
+  //    para que el browser NO lo deje pegado en el DOM ni lo guarde.
+  // 2. Si pasan 15 min sin actividad (mouse/teclado): auto-logout +
+  //    blanqueamos la pagina + mensaje claro.
+  // 3. El JWT del backend tambien vence en 15 min: aunque alguien
+  //    haya guardado la password en el password manager, si entra
+  //    despues de 15 min va a tener que reloguearse igual.
+
+  var INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;  // 15 min
+  var inactivityTimer = null;
+
+  function clearSensitiveFields(){
+    var pwd = document.getElementById("login-password");
+    if (pwd) pwd.value = "";
+    var newPwd = document.getElementById("pw-new");
+    if (newPwd) newPwd.value = "";
+  }
+
+  function doLogout(reason){
+    TOKEN = "";
+    clearSensitiveFields();
+    var loginEl = document.getElementById("login-section");
+    var adminEl = document.getElementById("admin-section");
+    if (loginEl) loginEl.style.display = "block";
+    if (adminEl) adminEl.style.display = "none";
+    if (reason){
+      var msg = document.getElementById("login-msg");
+      if (msg){
+        msg.className = "msg msg-err";
+        msg.textContent = reason;
+      }
+    }
+    if (inactivityTimer){ clearTimeout(inactivityTimer); inactivityTimer = null; }
+  }
+
+  function resetInactivityTimer(){
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    if (!TOKEN) return;  // sin login no hay timer
+    inactivityTimer = setTimeout(function(){
+      doLogout("Sesion cerrada por inactividad (15 min). Vuelva a loguearse.");
+    }, INACTIVITY_TIMEOUT_MS);
+  }
+
+  // Limpiar password al salir/recargar la pagina (NO se queda en el DOM
+  // ni en el form al volver con back). Esto convence al browser de NO
+  // ofrecer guardarla en la mayoria de los casos.
+  window.addEventListener("beforeunload", clearSensitiveFields);
+  window.addEventListener("pagehide", clearSensitiveFields);
+
+  // Eventos que cuentan como 'actividad': si el admin esta usando el
+  // panel, no lo desloggeamos.
+  ["mousedown", "keydown", "touchstart", "click"].forEach(function(ev){
+    document.addEventListener(ev, resetInactivityTimer, {passive: true});
+  });
+
   function $(id){ return document.getElementById(id); }
   function val(id){ return $(id).value.trim(); }
 
@@ -256,6 +315,11 @@ tr:hover td{background:#162032}
     if (body) opts.body = JSON.stringify(body);
     return fetch(API + path, opts).then(function(resp){
       return resp.json().then(function(data){
+        // Si el backend devuelve 401 con sesion activa, el JWT vencio
+        // (admins tienen JWT de 15 min). Forzar logout limpio.
+        if (resp.status === 401 && TOKEN){
+          doLogout("Sesion expirada (15 min). Vuelva a loguearse.");
+        }
         return { status: resp.status, data: data };
       }).catch(function(){
         return { status: resp.status, data: { detail: "Respuesta no JSON (status " + resp.status + ")" } };
@@ -276,7 +340,11 @@ tr:hover td{background:#162032}
         $("admin-credits").textContent = r.data.credits;
         $("login-section").style.display = "none";
         $("admin-section").style.display = "block";
+        // Limpiar el campo password apenas logueamos para que no quede en el DOM
+        $("login-password").value = "";
         loadUsers();
+        // Arrancar el timer de inactividad
+        resetInactivityTimer();
       } else {
         showMsg("login-msg", false, errMsg(r.data));
       }
@@ -286,10 +354,7 @@ tr:hover td{background:#162032}
   $("login-password").addEventListener("keydown", function(e){ if(e.key==="Enter") $("btn-login").click(); });
 
   $("btn-logout").addEventListener("click", function(){
-    TOKEN = "";
-    $("login-section").style.display = "block";
-    $("admin-section").style.display = "none";
-    $("login-password").value = "";
+    doLogout("Sesion cerrada por el usuario");
   });
 
   function loadUsers(){

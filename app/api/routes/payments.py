@@ -2,6 +2,7 @@
 """Endpoints de pagos con MercadoPago."""
 
 import logging
+from datetime import datetime, timezone
 import mercadopago
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -185,7 +186,16 @@ def create_payment(
 
 @router.post("/webhook")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
-    """Webhook de MercadoPago — notificación de pago."""
+    """Webhook de MercadoPago - notificacion de pago.
+
+    Procesa 2 tipos de pagos segun el external_reference:
+    - 'user_<id>_credits_<n>': compra directa de paquete de creditos
+    - 'redemption_<id>': canje de una oferta relampago (#871)
+
+    En ambos casos suma creditos al user. Para ofertas tipo 'bundle' tambien
+    activa suscripciones gratis. Es idempotente: si ya se proceso el pago,
+    no acredita dos veces.
+    """
     try:
         body = await request.json()
     except Exception:
@@ -193,15 +203,17 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
 
     log.info(f"Webhook MP recibido: {body}")
 
-    # Solo procesar pagos aprobados
-    if body.get("type") != "payment" or body.get("action") != "payment.created":
-        return {"status": "ignored"}
+    # Procesar payment.created y payment.updated (cambios de estado)
+    if body.get("type") != "payment":
+        return {"status": "ignored_not_payment"}
+    action = body.get("action", "")
+    if action not in ("payment.created", "payment.updated"):
+        return {"status": f"ignored_action_{action}"}
 
     payment_id = body.get("data", {}).get("id")
     if not payment_id:
         return {"status": "no_payment_id"}
 
-    # Consultar pago en MercadoPago
     if not settings.mercadopago_access_token:
         return {"status": "not_configured"}
 
@@ -218,46 +230,165 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
         log.info(f"Pago {payment_id} no aprobado: {payment['status']}")
         return {"status": "not_approved"}
 
-    # Extraer user_id y créditos del external_reference
-    ext_ref = payment.get("external_reference", "")
-    try:
-        parts = ext_ref.split("_")
-        user_id = int(parts[1])
-        credits_amount = int(parts[3])
-    except (IndexError, ValueError):
-        log.error(f"external_reference inválido: {ext_ref}")
-        return {"status": "invalid_reference"}
+    ext_ref = (payment.get("external_reference") or "").strip()
+    if not ext_ref:
+        log.error(f"Pago {payment_id} sin external_reference")
+        return {"status": "no_reference"}
 
-    # Verificar que no se procesó antes
+    # Idempotencia: si ya procesamos este payment_id, ignorar
     existing = (
         db.query(CreditTransaction)
         .filter(CreditTransaction.payment_id == str(payment_id))
         .first()
     )
     if existing:
-        log.info(f"Pago {payment_id} ya procesado")
+        log.info(f"Pago {payment_id} ya procesado, ignorando")
         return {"status": "already_processed"}
 
-    # Acreditar
+    # Routing por tipo de external_reference
+    if ext_ref.startswith("redemption_"):
+        return _process_offer_redemption(db, payment_id, ext_ref, payment)
+    elif ext_ref.startswith("user_") and "_credits_" in ext_ref:
+        return _process_credit_purchase(db, payment_id, ext_ref, payment)
+    else:
+        log.error(f"external_reference desconocido: {ext_ref}")
+        return {"status": "unknown_reference_format"}
+
+
+def _process_credit_purchase(db: Session, payment_id, ext_ref: str, payment: dict) -> dict:
+    """Procesa una compra directa de paquete de creditos."""
+    try:
+        parts = ext_ref.split("_")
+        user_id = int(parts[1])
+        credits_amount = int(parts[3])
+    except (IndexError, ValueError):
+        log.error(f"external_reference invalido: {ext_ref}")
+        return {"status": "invalid_reference"}
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         log.error(f"Usuario {user_id} no encontrado")
         return {"status": "user_not_found"}
 
     user.credits += credits_amount
-
     txn = CreditTransaction(
         user_id=user.id,
         amount=credits_amount,
         balance_after=user.credits,
-        description=f"Compra {credits_amount} créditos — MercadoPago #{payment_id}",
+        description=f"Compra {credits_amount} creditos - MercadoPago #{payment_id}",
         payment_id=str(payment_id),
     )
     db.add(txn)
     db.commit()
 
-    log.info(f"Acreditados {credits_amount} créditos a user {user_id}. Balance: {user.credits}")
-    return {"status": "ok", "credits_added": credits_amount}
+    log.info(f"Acreditados {credits_amount} creditos a user {user_id}. Balance: {user.credits}")
+    return {"status": "ok", "type": "credit_purchase", "credits_added": credits_amount}
+
+
+def _process_offer_redemption(db: Session, payment_id, ext_ref: str, payment: dict) -> dict:
+    """Procesa el canje de una oferta relampago.
+
+    Pasos:
+    1. Buscar la OfferRedemption por id
+    2. Sumar credits_purchased + credits_bonus al user
+    3. Si la oferta es bundle: activar modulos gratis por N meses
+    4. Marcar redemption status='completed' + payment_id
+    """
+    import json as _json
+    from datetime import timedelta
+    from app.models.offer import Offer, OfferRedemption
+    from app.models.subscription import Subscription
+
+    try:
+        redemption_id = int(ext_ref.split("_", 1)[1])
+    except (IndexError, ValueError):
+        log.error(f"redemption_id invalido en ext_ref: {ext_ref}")
+        return {"status": "invalid_reference"}
+
+    redemption = (
+        db.query(OfferRedemption)
+        .filter(OfferRedemption.id == redemption_id)
+        .first()
+    )
+    if not redemption:
+        log.error(f"Redemption #{redemption_id} no existe")
+        return {"status": "redemption_not_found"}
+
+    if redemption.status == "completed":
+        log.info(f"Redemption #{redemption_id} ya completada")
+        return {"status": "already_completed"}
+
+    user = db.query(User).filter(User.id == redemption.user_id).first()
+    if not user:
+        log.error(f"User {redemption.user_id} de redemption no existe")
+        return {"status": "user_not_found"}
+
+    offer = db.query(Offer).filter(Offer.id == redemption.offer_id).first()
+    if not offer:
+        log.error(f"Offer {redemption.offer_id} de redemption no existe")
+        return {"status": "offer_not_found"}
+
+    # 1. Sumar creditos (compra + bonus)
+    total_credits = redemption.credits_purchased + redemption.credits_bonus
+    user.credits += total_credits
+    txn = CreditTransaction(
+        user_id=user.id,
+        amount=total_credits,
+        balance_after=user.credits,
+        description=(
+            f"Oferta '{offer.name}' canje #{redemption.id} - "
+            f"{redemption.credits_purchased} cred + {redemption.credits_bonus} bonus "
+            f"- MP #{payment_id}"
+        ),
+        payment_id=str(payment_id),
+    )
+    db.add(txn)
+
+    # 2. Si es bundle: activar modulos gratis
+    bundle_activations = []
+    if offer.offer_type == "bundle":
+        try:
+            config = _json.loads(offer.config_json or "{}")
+            free_modules = config.get("free_modules", []) or []
+            free_months = int(config.get("free_months", 0) or 0)
+            if free_modules and free_months > 0:
+                now = datetime.now(timezone.utc)
+                expires = now + timedelta(days=free_months * 30)
+                for module_id in free_modules:
+                    sub = Subscription(
+                        user_id=user.id,
+                        module_id=module_id,
+                        period="monthly" if free_months == 1 else "annual",
+                        started_at=now,
+                        expires_at=expires,
+                        status="active",
+                        amount_paid_ars=0,
+                        amount_paid_usd=0,
+                        auto_renew=False,
+                        notes=f"Gratis por oferta '{offer.name}' (canje #{redemption.id})",
+                    )
+                    db.add(sub)
+                    bundle_activations.append(module_id)
+        except Exception as e:
+            log.error(f"Error activando bundle para redemption #{redemption_id}: {e}", exc_info=True)
+
+    # 3. Marcar redemption completada
+    redemption.status = "completed"
+    redemption.mp_payment_id = str(payment_id)
+    db.commit()
+
+    log.info(
+        f"Redemption #{redemption_id} completada: user {user.id} "
+        f"recibe {total_credits} creditos (balance: {user.credits})"
+        + (f" + modulos {bundle_activations}" if bundle_activations else "")
+    )
+    return {
+        "status": "ok",
+        "type": "offer_redemption",
+        "redemption_id": redemption_id,
+        "credits_added": total_credits,
+        "bundle_modules_activated": bundle_activations,
+    }
 
 
 @router.get("/result")

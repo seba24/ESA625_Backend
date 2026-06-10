@@ -901,3 +901,52 @@ def admin_list_redemptions(
         }
         for r, u in rows
     ]
+
+
+# ----------------------------------------------------------------------
+# Simulacion de pagos para testing (#871 Fase 3)
+# ----------------------------------------------------------------------
+
+class SimulatePaymentRequest(BaseModel):
+    redemption_id: int
+    fake_payment_id: Optional[str] = None  # default: 'TEST-<redemption_id>'
+
+
+@router.post("/simulate-payment-approved")
+def simulate_payment_approved(
+    req: SimulatePaymentRequest,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Simula que MercadoPago aprobo un pago - solo para testing.
+
+    Util para probar el flujo de oferta sin tener que pagar real con MP.
+    Llama directamente la logica de _process_offer_redemption del webhook
+    como si MP hubiera notificado.
+
+    Marca el redemption como 'completed', suma creditos al user,
+    y activa modulos si era bundle.
+    """
+    from app.models.offer import OfferRedemption
+    from app.api.routes.payments import _process_offer_redemption
+
+    redemption = (
+        db.query(OfferRedemption)
+        .filter(OfferRedemption.id == req.redemption_id)
+        .first()
+    )
+    if not redemption:
+        raise HTTPException(404, f"Redemption #{req.redemption_id} no encontrado")
+    if redemption.status == "completed":
+        raise HTTPException(400, "Redemption ya esta completada")
+
+    fake_payment_id = req.fake_payment_id or f"TEST-{req.redemption_id}"
+    ext_ref = f"redemption_{req.redemption_id}"
+    fake_payment = {"external_reference": ext_ref, "status": "approved"}
+
+    log.warning(
+        f"Admin {admin.email} simula pago aprobado para redemption #{req.redemption_id} "
+        f"(fake_payment_id={fake_payment_id})"
+    )
+    result = _process_offer_redemption(db, fake_payment_id, ext_ref, fake_payment)
+    return result

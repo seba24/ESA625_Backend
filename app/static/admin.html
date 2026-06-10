@@ -190,6 +190,27 @@ tr:hover td{background:#162032}
 <div id="pricing-msg"></div>
 </div>
 
+<!-- ============================================================ -->
+<!-- Paquetes de creditos (#870 Fase 1 ext)                        -->
+<!-- ============================================================ -->
+
+<div class="card">
+<h2>Paquetes de creditos</h2>
+<p style="color:#64748b;font-size:.85em;margin-bottom:10px">Editar precios de paquetes que ve el usuario en Mercado Pago. Tocar 'Guardar' para aplicar cambios. Desactivar (active=No) oculta el paquete sin borrarlo.</p>
+<button class="secondary" id="btn-load-packages" style="margin-bottom:10px">Recargar paquetes</button>
+<table><thead><tr>
+<th>Creditos</th><th>Precio ARS</th><th>$/Cred</th><th>Descripcion</th><th>Activo</th><th>Orden</th><th>Accion</th>
+</tr></thead><tbody id="packages-table"></tbody></table>
+
+<h3 style="color:#94a3b8;margin:20px 0 10px;font-size:1em">Agregar paquete nuevo</h3>
+<div class="form-row"><label>Creditos:</label><input type="number" id="newpkg-credits" min="1" placeholder="50"></div>
+<div class="form-row"><label>Precio ARS:</label><input type="number" id="newpkg-price" min="0" step="0.01" placeholder="325000"></div>
+<div class="form-row"><label>Descripcion:</label><input type="text" id="newpkg-desc" placeholder="50 creditos"></div>
+<div class="form-row"><label>Orden:</label><input type="number" id="newpkg-order" min="0" value="50"></div>
+<div class="form-row"><button id="btn-add-package">Agregar Paquete</button></div>
+<div id="packages-msg"></div>
+</div>
+
 </div>
 </div>
 
@@ -516,12 +537,117 @@ tr:hover td{background:#162032}
 
   $("btn-load-pricing").addEventListener("click", loadPricing);
 
-  // Cargar suscripciones y pricing al loguear (se llama desde loadUsers via login)
+  // ============================================================
+  // Paquetes de creditos (#870 Fase 1 ext)
+  // ============================================================
+
+  function loadPackages(){
+    api("GET", "/admin/credit-packages").then(function(r){
+      var tb = $("packages-table");
+      tb.innerHTML = "";
+      if (r.status === 200 && Array.isArray(r.data)){
+        if (r.data.length === 0){
+          tb.innerHTML = "<tr><td colspan=7 style='color:#fbbf24;text-align:center;padding:20px'>Tabla vacia - aplicar migration 005_credit_packages.sql en Neon</td></tr>";
+          return;
+        }
+        r.data.forEach(function(p){
+          var tr = document.createElement("tr");
+          tr.className = "pricing-row";
+          tr.dataset.credits = p.credits;
+          tr.innerHTML =
+            "<td><strong>" + p.credits + "</strong></td>" +
+            "<td><input type='number' step='0.01' min='0' class='pkg-price' value='" + p.price_ars + "' style='width:110px;text-align:right;background:#0f172a;border:1px solid #334155;color:#fbbf24;padding:6px 8px;border-radius:4px;font-weight:600'></td>" +
+            "<td style='color:#94a3b8;font-size:.85em'>$" + p.price_per_credit.toLocaleString("es-AR") + "</td>" +
+            "<td><input type='text' class='pkg-desc' value='" + (p.description || "").replace(/'/g, "&#39;") + "' style='min-width:140px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:4px'></td>" +
+            "<td><label style='min-width:auto;cursor:pointer'><input type='checkbox' class='pkg-active' " + (p.active ? "checked" : "") + "> " + (p.active ? "Si" : "No") + "</label></td>" +
+            "<td><input type='number' class='pkg-order' value='" + p.sort_order + "' style='width:60px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:4px'></td>" +
+            "<td></td>";
+
+          var actionTd = tr.lastChild;
+          var saveBtn = document.createElement("button");
+          saveBtn.className = "save-btn";
+          saveBtn.textContent = "Guardar";
+          saveBtn.style.marginRight = "4px";
+          saveBtn.addEventListener("click", function(){
+            var price = parseFloat(tr.querySelector(".pkg-price").value);
+            var desc = tr.querySelector(".pkg-desc").value;
+            var active = tr.querySelector(".pkg-active").checked;
+            var order = parseInt(tr.querySelector(".pkg-order").value) || 0;
+            if (isNaN(price) || price < 0){
+              showMsg("packages-msg", false, "Precio invalido");
+              return;
+            }
+            upsertPackage(p.credits, price, desc, active, order);
+          });
+          actionTd.appendChild(saveBtn);
+
+          var delBtn = document.createElement("button");
+          delBtn.className = "danger";
+          delBtn.style.padding = "4px 8px";
+          delBtn.style.fontSize = ".8em";
+          delBtn.textContent = "Borrar";
+          delBtn.addEventListener("click", function(){
+            if (!confirm("Eliminar paquete de " + p.credits + " creditos? Mejor desactivar (active=No) que borrar.")) return;
+            api("DELETE", "/admin/credit-packages/" + p.credits).then(function(r2){
+              if (r2.status === 200){
+                showMsg("packages-msg", true, "Paquete eliminado");
+                loadPackages();
+              } else {
+                showMsg("packages-msg", false, errMsg(r2.data));
+              }
+            });
+          });
+          actionTd.appendChild(delBtn);
+
+          tb.appendChild(tr);
+        });
+      } else {
+        tb.innerHTML = "<tr><td colspan=7>" + errMsg(r.data) + "</td></tr>";
+      }
+    });
+  }
+
+  function upsertPackage(credits, price, desc, active, order){
+    api("PUT", "/admin/credit-packages", {
+      credits: credits,
+      price_ars: price,
+      description: desc || (credits + " creditos"),
+      active: active,
+      sort_order: order
+    }).then(function(r){
+      if (r.status === 200){
+        showMsg("packages-msg", true,
+          r.data.message + " - " + credits + " cred = $" + r.data.price_ars + " ($" + r.data.price_per_credit + "/cred)");
+        loadPackages();
+      } else {
+        showMsg("packages-msg", false, errMsg(r.data));
+      }
+    });
+  }
+
+  $("btn-add-package").addEventListener("click", function(){
+    var credits = parseInt($("newpkg-credits").value);
+    var price = parseFloat($("newpkg-price").value);
+    var desc = val("newpkg-desc");
+    var order = parseInt($("newpkg-order").value) || 0;
+    if (!credits || credits < 1){ showMsg("packages-msg", false, "Cantidad de creditos requerida"); return; }
+    if (isNaN(price) || price < 0){ showMsg("packages-msg", false, "Precio invalido"); return; }
+    upsertPackage(credits, price, desc, true, order);
+    // Limpiar form
+    $("newpkg-credits").value = "";
+    $("newpkg-price").value = "";
+    $("newpkg-desc").value = "";
+  });
+
+  $("btn-load-packages").addEventListener("click", loadPackages);
+
+  // Cargar suscripciones, pricing y paquetes al loguear
   var origLoadUsers = loadUsers;
   loadUsers = function(){
     origLoadUsers();
     loadSubs();
     loadPricing();
+    loadPackages();
   };
 })();
 </script>

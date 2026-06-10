@@ -19,13 +19,46 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
-# Paquetes de créditos disponibles
-CREDIT_PACKAGES = {
-    1: {"price": 10000, "description": "1 crédito"},
-    5: {"price": 45000, "description": "5 créditos"},
-    10: {"price": 80000, "description": "10 créditos"},
-    25: {"price": 175000, "description": "25 créditos"},
+# #870: paquetes editables desde panel admin via app/services/credits_pricing.py.
+# Los defaults aqui se usan SOLO si la DB no responde (fallback).
+_DEFAULT_CREDIT_PACKAGES = {
+    1: {"price": 10000, "description": "1 credito"},
+    5: {"price": 45000, "description": "5 creditos"},
+    10: {"price": 80000, "description": "10 creditos"},
+    25: {"price": 175000, "description": "25 creditos"},
+    50: {"price": 325000, "description": "50 creditos"},
+    100: {"price": 600000, "description": "100 creditos"},
 }
+
+
+def _get_active_packages(db: Session) -> dict:
+    """Devuelve {credits: {'price': float, 'description': str}} desde la DB.
+
+    Si la query falla (DB no disponible), retorna los defaults hardcoded.
+    Solo paquetes con active=True, ordenados por sort_order.
+    """
+    try:
+        from app.models.credit_package import CreditPackage
+        rows = (
+            db.query(CreditPackage)
+            .filter(CreditPackage.active.is_(True))
+            .order_by(CreditPackage.sort_order, CreditPackage.credits)
+            .all()
+        )
+        if not rows:
+            return _DEFAULT_CREDIT_PACKAGES
+        return {
+            r.credits: {"price": float(r.price_ars), "description": r.description}
+            for r in rows
+        }
+    except Exception as e:
+        log.warning(f"No se pudo leer credit_packages de DB, usando defaults: {e}")
+        return _DEFAULT_CREDIT_PACKAGES
+
+
+# Compatibilidad con codigo viejo que importa CREDIT_PACKAGES (lectura defaults).
+# IMPORTANTE: usar _get_active_packages(db) en rutas, NO esta constante.
+CREDIT_PACKAGES = _DEFAULT_CREDIT_PACKAGES
 
 
 class CreatePaymentRequest(BaseModel):
@@ -47,8 +80,9 @@ class PackageResponse(BaseModel):
 
 
 @router.get("/packages", response_model=list[PackageResponse])
-def list_packages():
-    """Listar paquetes de créditos disponibles."""
+def list_packages(db: Session = Depends(get_db)):
+    """Listar paquetes de creditos disponibles (lee de DB, fallback a defaults)."""
+    packages = _get_active_packages(db)
     return [
         PackageResponse(
             credits=credits,
@@ -56,7 +90,7 @@ def list_packages():
             price_per_credit=round(pkg["price"] / credits, 2),
             description=pkg["description"],
         )
-        for credits, pkg in sorted(CREDIT_PACKAGES.items())
+        for credits, pkg in sorted(packages.items())
     ]
 
 
@@ -70,10 +104,11 @@ def create_payment(
     if not settings.mercadopago_access_token:
         raise HTTPException(500, "MercadoPago no configurado")
 
-    pkg = CREDIT_PACKAGES.get(req.credits)
+    packages = _get_active_packages(db)
+    pkg = packages.get(req.credits)
     if not pkg:
-        available = list(CREDIT_PACKAGES.keys())
-        raise HTTPException(400, f"Paquete no válido. Opciones: {available}")
+        available = sorted(packages.keys())
+        raise HTTPException(400, f"Paquete no valido. Opciones: {available}")
 
     sdk = mercadopago.SDK(settings.mercadopago_access_token)
 

@@ -27,7 +27,7 @@ class ESUReportGenerator(BaseReportGenerator):
     """Generador de reportes PDF para pruebas de electrobisturi."""
 
     MODULE_NAME = "ELECTROBISTURÍ"
-    MODULE_TITLE = "VALIDACIÓN TRAZABLE — ELECTROBISTURÍ"
+    MODULE_TITLE = "CERTIFICACIÓN TRAZABLE — ELECTROBISTURÍ"
     MODULE_SUBTITLE = "Analizador de Unidad Electroquirurgica"
     MODULE_STANDARD = "IEC 60601-2-2"
 

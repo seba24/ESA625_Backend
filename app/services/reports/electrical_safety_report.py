@@ -47,7 +47,7 @@ class ElectricalSafetyReportGenerator(BaseReportGenerator):
     """
 
     MODULE_NAME = "SEGURIDAD ELÉCTRICA"
-    MODULE_TITLE = "VALIDACIÓN TRAZABLE — SEGURIDAD ELÉCTRICA"
+    MODULE_TITLE = "CERTIFICACIÓN TRAZABLE — SEGURIDAD ELÉCTRICA"
     MODULE_SUBTITLE = "Analizador de Seguridad Eléctrica"
     MODULE_STANDARD = "IEC 62353 / IEC 60601-1"
 

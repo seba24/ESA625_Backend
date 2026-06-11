@@ -31,7 +31,7 @@ class MPReportGenerator(BaseReportGenerator):
     """Generador de reportes para el módulo de Monitores Multiparamétricos."""
 
     MODULE_NAME = "MONITOR MULTIPARAMÉTRICO"
-    MODULE_TITLE = "VALIDACIÓN TRAZABLE — MONITOR MULTIPARAMÉTRICO"
+    MODULE_TITLE = "CERTIFICACIÓN TRAZABLE — MONITOR MULTIPARAMÉTRICO"
     MODULE_SUBTITLE = "ProSim 8 Patient Simulator"
     MODULE_STANDARD = "IEC 80601-2-49 / IEC 60601-2-25"
 

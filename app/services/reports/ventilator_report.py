@@ -34,7 +34,7 @@ class VentilatorReportGenerator(BaseReportGenerator):
     """
 
     MODULE_NAME = "VENTILADOR"
-    MODULE_TITLE = "VALIDACIÓN TRAZABLE — VENTILADOR"
+    MODULE_TITLE = "CERTIFICACIÓN TRAZABLE — VENTILADOR"
     MODULE_SUBTITLE = "Analizador de Ventilación Mecánica"
     MODULE_STANDARD = "ISO 80601-2-12"
 

@@ -302,16 +302,27 @@ async def smtp_status():
             "SMTP_FROM", "REPORT_DESTINATION", "SMTP_USE_TLS"]
     result = {}
     for k in keys:
-        v = os.environ.get(k, "").strip()
+        raw = os.environ.get(k, "")
+        v = raw.strip()
+        # Diagnostico fino: detectar espacios, longitud antes/despues de strip
         result[k] = {
             "set": bool(v),
-            "length": len(v),
-            # Solo mostrar primeros/ultimos chars para verificar tipeo (no pass)
-            "preview": (v[:3] + "..." + v[-3:]) if len(v) > 6 and k != "SMTP_PASSWORD" else (
-                "***" if v else "(empty)"
-            ),
+            "length_raw": len(raw),
+            "length_stripped": len(v),
+            "had_leading_space": raw != raw.lstrip(),
+            "had_trailing_space": raw != raw.rstrip(),
+            "has_internal_space": " " in v,
         }
-    # Verificar si la condicion del endpoint pasaria
+        if k == "SMTP_PASSWORD":
+            # Solo mostrar primer y ultimo char para verificar tipeo
+            result[k]["preview"] = (
+                f"{v[0]}***{v[-1]}" if len(v) >= 2 else ("***" if v else "(empty)")
+            )
+        else:
+            # Para campos no sensibles mostrar mas chars
+            result[k]["preview"] = (
+                v[:5] + "..." + v[-5:]) if len(v) > 10 else v or "(empty)"
+
     required = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "REPORT_DESTINATION"]
     all_required_set = all(result[k]["set"] for k in required)
     result["__email_would_send__"] = all_required_set

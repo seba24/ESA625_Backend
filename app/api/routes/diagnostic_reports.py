@@ -218,66 +218,35 @@ async def upload_diagnostic_report(
     )
 
 
-@router.get("/smtp-test-verbose")
-async def smtp_test_verbose():
-    """Test SMTP paso a paso para ver donde falla exactamente."""
-    smtp_host = os.environ.get("SMTP_HOST", "").strip()
-    smtp_port = os.environ.get("SMTP_PORT", "587").strip()
-    smtp_user = os.environ.get("SMTP_USER", "").strip()
-    smtp_pass = os.environ.get("SMTP_PASSWORD", "").strip()
+def _check_debug_token(request: Request):
+    """Verifica X-Debug-Token contra ADMIN_DEBUG_TOKEN env var.
 
-    steps = []
-    try:
-        steps.append({"step": "1_connect", "msg": f"Conectando a {smtp_host}:{smtp_port}..."})
-        server = smtplib.SMTP(smtp_host, int(smtp_port), timeout=30)
-        steps.append({"step": "1_connect", "ok": True})
-
-        steps.append({"step": "2_ehlo", "msg": "EHLO..."})
-        server.ehlo()
-        steps.append({"step": "2_ehlo", "ok": True})
-
-        steps.append({"step": "3_starttls", "msg": "STARTTLS..."})
-        server.starttls()
-        steps.append({"step": "3_starttls", "ok": True})
-
-        steps.append({"step": "4_ehlo2", "msg": "EHLO post-TLS..."})
-        server.ehlo()
-        steps.append({"step": "4_ehlo2", "ok": True})
-
-        steps.append({
-            "step": "5_login",
-            "msg": f"Login user={smtp_user!r} pass_len={len(smtp_pass)} "
-                   f"pass_first_char={smtp_pass[0] if smtp_pass else ''} "
-                   f"pass_last_char={smtp_pass[-1] if smtp_pass else ''}"
-        })
-        server.login(smtp_user, smtp_pass)
-        steps.append({"step": "5_login", "ok": True})
-
-        server.quit()
-        return {"success": True, "steps": steps}
-    except smtplib.SMTPAuthenticationError as e:
-        steps.append({
-            "step": "5_login",
-            "ok": False,
-            "error_code": e.smtp_code,
-            "error_msg": e.smtp_error.decode('utf-8', errors='ignore') if e.smtp_error else str(e),
-        })
-        return {"success": False, "steps": steps}
-    except Exception as e:
-        steps.append({
-            "step": "exception",
-            "error_type": type(e).__name__,
-            "error_msg": str(e),
-        })
-        return {"success": False, "steps": steps}
+    Si la env var no esta seteada, los endpoints debug quedan bloqueados.
+    Para usar /smtp-test o /smtp-status, setear ADMIN_DEBUG_TOKEN en DO y
+    mandar header X-Debug-Token con el mismo valor.
+    """
+    expected = os.environ.get("ADMIN_DEBUG_TOKEN", "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not Found",
+        )
+    got = request.headers.get("x-debug-token", "").strip()
+    if got != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid debug token",
+        )
 
 
 @router.get("/smtp-test")
-async def smtp_test():
+async def smtp_test(request: Request):
     """Manda un email de prueba al REPORT_DESTINATION y devuelve el error exacto.
 
-    Usar SOLO para debug. Endpoint sin auth - no exponer en prod por mucho tiempo.
+    Requiere header X-Debug-Token con valor de env var ADMIN_DEBUG_TOKEN.
+    Usar SOLO para debug.
     """
+    _check_debug_token(request)
     smtp_host = os.environ.get("SMTP_HOST", "").strip()
     smtp_port = os.environ.get("SMTP_PORT", "587").strip()
     smtp_user = os.environ.get("SMTP_USER", "").strip()
@@ -350,8 +319,9 @@ async def smtp_test():
 
 
 @router.get("/smtp-status")
-async def smtp_status():
-    """Verifica que env vars SMTP estan configuradas. No expone valores."""
+async def smtp_status(request: Request):
+    """Verifica que env vars SMTP estan configuradas. Requiere X-Debug-Token."""
+    _check_debug_token(request)
     keys = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD",
             "SMTP_FROM", "REPORT_DESTINATION", "SMTP_USE_TLS"]
     result = {}

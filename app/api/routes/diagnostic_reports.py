@@ -218,6 +218,60 @@ async def upload_diagnostic_report(
     )
 
 
+@router.get("/smtp-test-verbose")
+async def smtp_test_verbose():
+    """Test SMTP paso a paso para ver donde falla exactamente."""
+    smtp_host = os.environ.get("SMTP_HOST", "").strip()
+    smtp_port = os.environ.get("SMTP_PORT", "587").strip()
+    smtp_user = os.environ.get("SMTP_USER", "").strip()
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "").strip()
+
+    steps = []
+    try:
+        steps.append({"step": "1_connect", "msg": f"Conectando a {smtp_host}:{smtp_port}..."})
+        server = smtplib.SMTP(smtp_host, int(smtp_port), timeout=30)
+        steps.append({"step": "1_connect", "ok": True})
+
+        steps.append({"step": "2_ehlo", "msg": "EHLO..."})
+        server.ehlo()
+        steps.append({"step": "2_ehlo", "ok": True})
+
+        steps.append({"step": "3_starttls", "msg": "STARTTLS..."})
+        server.starttls()
+        steps.append({"step": "3_starttls", "ok": True})
+
+        steps.append({"step": "4_ehlo2", "msg": "EHLO post-TLS..."})
+        server.ehlo()
+        steps.append({"step": "4_ehlo2", "ok": True})
+
+        steps.append({
+            "step": "5_login",
+            "msg": f"Login user={smtp_user!r} pass_len={len(smtp_pass)} "
+                   f"pass_first_char={smtp_pass[0] if smtp_pass else ''} "
+                   f"pass_last_char={smtp_pass[-1] if smtp_pass else ''}"
+        })
+        server.login(smtp_user, smtp_pass)
+        steps.append({"step": "5_login", "ok": True})
+
+        server.quit()
+        return {"success": True, "steps": steps}
+    except smtplib.SMTPAuthenticationError as e:
+        steps.append({
+            "step": "5_login",
+            "ok": False,
+            "error_code": e.smtp_code,
+            "error_msg": e.smtp_error.decode('utf-8', errors='ignore') if e.smtp_error else str(e),
+        })
+        return {"success": False, "steps": steps}
+    except Exception as e:
+        steps.append({
+            "step": "exception",
+            "error_type": type(e).__name__,
+            "error_msg": str(e),
+        })
+        return {"success": False, "steps": steps}
+
+
 @router.get("/smtp-test")
 async def smtp_test():
     """Manda un email de prueba al REPORT_DESTINATION y devuelve el error exacto.

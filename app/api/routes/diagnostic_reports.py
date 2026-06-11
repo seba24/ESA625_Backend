@@ -218,6 +218,83 @@ async def upload_diagnostic_report(
     )
 
 
+@router.get("/smtp-test")
+async def smtp_test():
+    """Manda un email de prueba al REPORT_DESTINATION y devuelve el error exacto.
+
+    Usar SOLO para debug. Endpoint sin auth - no exponer en prod por mucho tiempo.
+    """
+    smtp_host = os.environ.get("SMTP_HOST", "").strip()
+    smtp_port = os.environ.get("SMTP_PORT", "587").strip()
+    smtp_user = os.environ.get("SMTP_USER", "").strip()
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "").strip()
+    smtp_from = os.environ.get("SMTP_FROM", smtp_user).strip()
+    dest = os.environ.get("REPORT_DESTINATION", "").strip()
+    use_tls = os.environ.get("SMTP_USE_TLS", "1").strip() != "0"
+
+    if not (smtp_host and smtp_user and smtp_pass and dest):
+        return {
+            "success": False,
+            "stage": "env_vars",
+            "error": "Falta alguna env var",
+            "have": {
+                "SMTP_HOST": bool(smtp_host),
+                "SMTP_USER": bool(smtp_user),
+                "SMTP_PASSWORD": bool(smtp_pass),
+                "REPORT_DESTINATION": bool(dest),
+            },
+        }
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "[ESA625] SMTP Test - " + datetime.now().isoformat(timespec='seconds')
+        msg["From"] = smtp_from
+        msg["To"] = dest
+        msg.set_content(
+            "Este es un email de prueba del backend ESA625.\n"
+            f"Hora: {datetime.now().isoformat(timespec='seconds')}\n"
+            "Si llego este email, SMTP funciona OK."
+        )
+
+        port = int(smtp_port)
+        if use_tls:
+            with smtplib.SMTP(smtp_host, port, timeout=30) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, port, timeout=30) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+
+        return {
+            "success": True,
+            "message": f"Email enviado a {dest}",
+            "from": smtp_from,
+            "host": smtp_host,
+            "port": port,
+        }
+    except smtplib.SMTPAuthenticationError as e:
+        return {
+            "success": False,
+            "stage": "auth",
+            "error": f"Login fallo: {e.smtp_code} {e.smtp_error.decode('utf-8', errors='ignore') if e.smtp_error else ''}",
+            "hint": "App Password mal o no es de la cuenta gmail dedicada. Verificar que SMTP_USER es la cuenta que generó la App Password.",
+        }
+    except smtplib.SMTPException as e:
+        return {
+            "success": False,
+            "stage": "smtp",
+            "error": f"{type(e).__name__}: {str(e)}",
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "stage": "other",
+            "error": f"{type(e).__name__}: {str(e)}",
+        }
+
+
 @router.get("/smtp-status")
 async def smtp_status():
     """Verifica que env vars SMTP estan configuradas. No expone valores."""

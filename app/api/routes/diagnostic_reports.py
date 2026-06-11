@@ -218,6 +218,29 @@ async def upload_diagnostic_report(
     )
 
 
+@router.get("/smtp-status")
+async def smtp_status():
+    """Verifica que env vars SMTP estan configuradas. No expone valores."""
+    keys = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD",
+            "SMTP_FROM", "REPORT_DESTINATION", "SMTP_USE_TLS"]
+    result = {}
+    for k in keys:
+        v = os.environ.get(k, "").strip()
+        result[k] = {
+            "set": bool(v),
+            "length": len(v),
+            # Solo mostrar primeros/ultimos chars para verificar tipeo (no pass)
+            "preview": (v[:3] + "..." + v[-3:]) if len(v) > 6 and k != "SMTP_PASSWORD" else (
+                "***" if v else "(empty)"
+            ),
+        }
+    # Verificar si la condicion del endpoint pasaria
+    required = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "REPORT_DESTINATION"]
+    all_required_set = all(result[k]["set"] for k in required)
+    result["__email_would_send__"] = all_required_set
+    return result
+
+
 @router.get("/list")
 async def list_diagnostic_reports(
     limit: int = 50,

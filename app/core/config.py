@@ -33,4 +33,18 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
+# #1526 SEGURIDAD: si falta JWT_SECRET_KEY se usaba el valor de ejemplo (que
+# esta en este repo publico) y cualquiera podia fabricar una sesion de admin.
+# Sin la variable, se usa una clave al azar: las sesiones se pierden al
+# reiniciar el servidor, pero nadie puede falsificarlas.
+_JWT_DE_EJEMPLO = "change-this-to-a-random-secret-key"
+
 settings = Settings()
+if not settings.jwt_secret_key or settings.jwt_secret_key == _JWT_DE_EJEMPLO:
+    import logging as _logging
+    import secrets as _secrets
+
+    _logging.getLogger(__name__).critical(
+        "#1526 JWT_SECRET_KEY no configurada: usando una clave al azar "
+        "(las sesiones no sobreviven a un reinicio). Configurarla en DigitalOcean.")
+    settings.jwt_secret_key = _secrets.token_hex(32)

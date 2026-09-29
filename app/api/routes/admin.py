@@ -19,9 +19,6 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-ADMIN_BOOTSTRAP_KEY = "SR-CERT-ADMIN-2026"
-
-
 class BootstrapRequest(BaseModel):
     email: str
     bootstrap_key: str
@@ -32,8 +29,21 @@ def bootstrap_admin(
     req: BootstrapRequest,
     db: Session = Depends(get_db),
 ):
-    """Hacer admin al primer usuario. Solo funciona con clave de bootstrap."""
-    if req.bootstrap_key != ADMIN_BOOTSTRAP_KEY:
+    """Hacer admin al primer usuario. Solo funciona con clave de bootstrap.
+
+    #1526 SEGURIDAD: la clave estaba escrita en el codigo de este repo
+    PUBLICO ("SR-CERT-ADMIN-2026"): con el registro abierto, cualquiera
+    podia hacerse admin. Ahora sale de la variable de entorno
+    ADMIN_BOOTSTRAP_KEY; sin ella el endpoint no existe (404). El valor
+    viejo quedo en el historial publico: no volver a usarlo.
+    """
+    import hmac
+    import os
+
+    esperada = os.environ.get("ADMIN_BOOTSTRAP_KEY", "").strip()
+    if not esperada:
+        raise HTTPException(404, "Not Found")
+    if not hmac.compare_digest(req.bootstrap_key.encode(), esperada.encode()):
         raise HTTPException(403, "Clave de bootstrap incorrecta")
 
     user = db.query(User).filter(User.email == req.email).first()

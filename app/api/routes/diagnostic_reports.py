@@ -355,9 +355,15 @@ async def smtp_status(request: Request):
 
 @router.get("/list")
 async def list_diagnostic_reports(
+    request: Request,
     limit: int = 50,
 ):
-    """Listar reportes recibidos (utilidad para admin via curl/panel)."""
+    """Listar reportes recibidos (utilidad para admin via curl/panel).
+
+    #1526 respondia sin autenticacion (nombres con el ID de maquina): ahora
+    pide el mismo X-Debug-Token que /smtp-test y /smtp-status.
+    """
+    _check_debug_token(request)
     if not _REPORTS_DIR.exists():
         return []
     files = sorted(
